@@ -63,3 +63,15 @@ class World:
         if not hasattr(self, '_FLocFine'):
             self._FLocFine = fem.localFaceMassMatrix(self.NWorldCoarse*self.NCoarseElement)
         return self._FLocFine
+
+    @property
+    def BLocGetterCoarse(self):
+        if not hasattr(self, '_BLocGetterCoarse'):
+            self._BLocGetterCoarse = fem.localBoundaryMassMatrixGetter(self.NWorldCoarse)
+        return self._BLocGetterCoarse
+
+    @property
+    def BLocGetterFine(self):
+        if not hasattr(self, '_BLocGetterFine'):
+            self._BLocGetterFine = fem.localBoundaryMassMatrixGetter(self.NWorldCoarse*self.NCoarseElement)
+        return self._BLocGetterFine
