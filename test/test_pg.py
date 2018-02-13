@@ -5,7 +5,7 @@ import scipy.stats as stats
 from itertools import count
 import os
 
-from pyevtk.hl import imageToVTK 
+#from pyevtk.hl import imageToVTK
 
 from gridlod import pg, interp, coef, util, fem, world, linalg, femsolver, transport
 from gridlod.world import World
@@ -13,7 +13,7 @@ from gridlod.world import World
 def saveCube(name, data, shape):
     uCube = np.reshape(data, shape[::-1])
     uCube = np.ascontiguousarray(np.transpose(uCube, axes=[2, 1, 0]))
-    imageToVTK(name, pointData = {"u" : uCube} )
+    #imageToVTK(name, pointData = {"u" : uCube} )
 
 
 class PetrovGalerkinLOD_TestCase(unittest.TestCase):
@@ -49,7 +49,7 @@ class PetrovGalerkinLOD_TestCase(unittest.TestCase):
         NpFine = np.prod(NWorldFine+1)
         NtFine = np.prod(NWorldFine)
         NWorldCoarse = np.array([2, 2])
-        NCoarseElement = NWorldFine/NWorldCoarse
+        NCoarseElement = NWorldFine//NWorldCoarse
         NtCoarse = np.prod(NWorldCoarse)
         NpCoarse = np.prod(NWorldCoarse+1)
         
@@ -115,7 +115,7 @@ class PetrovGalerkinLOD_TestCase(unittest.TestCase):
         
         for N in NList:
             NWorldCoarse = np.array([N])
-            NCoarseElement = NFine/NWorldCoarse
+            NCoarseElement = NFine//NWorldCoarse
             boundaryConditions = np.array([[0, 0]])
             world = World(NWorldCoarse, NCoarseElement, boundaryConditions)
             
@@ -162,7 +162,7 @@ class PetrovGalerkinLOD_TestCase(unittest.TestCase):
     def test_1d_toReference(self):
         NWorldFine = np.array([200])
         NWorldCoarse = np.array([10])
-        NCoarseElement = NWorldFine/NWorldCoarse
+        NCoarseElement = NWorldFine//NWorldCoarse
         boundaryConditions = np.array([[0, 0]])
         world = World(NWorldCoarse, NCoarseElement, boundaryConditions)
 
@@ -222,7 +222,7 @@ class PetrovGalerkinLOD_TestCase(unittest.TestCase):
         NpFine = np.prod(NWorldFine+1)
         NtFine = np.prod(NWorldFine)
         NWorldCoarse = np.array([3, 4])
-        NCoarseElement = NWorldFine/NWorldCoarse
+        NCoarseElement = NWorldFine//NWorldCoarse
         NtCoarse = np.prod(NWorldCoarse)
         NpCoarse = np.prod(NWorldCoarse+1)
         
@@ -264,9 +264,9 @@ class PetrovGalerkinLOD_TestCase(unittest.TestCase):
         # First case is to not modify. Error should be 0
         # The other cases modify one, a few or half of the coarse elements to different degrees.
         rCoarseModPairs = [([], []), ([0], [2.]), ([10], [3.]), ([4, 3, 2], [1.3, 1.5, 1.8])]
-        rCoarseModPairs.append((range(NtCoarse/2), [2]*NtCoarse))
-        rCoarseModPairs.append((range(NtCoarse/2), [0.9]*NtCoarse))
-        rCoarseModPairs.append((range(NtCoarse/2), [0.95]*NtCoarse))
+        rCoarseModPairs.append((range(NtCoarse//2), [2]*NtCoarse))
+        rCoarseModPairs.append((range(NtCoarse//2), [0.9]*NtCoarse))
+        rCoarseModPairs.append((range(NtCoarse//2), [0.95]*NtCoarse))
         
         for i, rCoarseModPair in zip(count(), rCoarseModPairs):
             for ind, val in zip(rCoarseModPair[0], rCoarseModPair[1]):
@@ -321,7 +321,7 @@ class PetrovGalerkinLOD_TestCase(unittest.TestCase):
         NpFine = np.prod(NWorldFine+1)
         NtFine = np.prod(NWorldFine)
         NWorldCoarse = np.array([2, 2])
-        NCoarseElement = NWorldFine/NWorldCoarse
+        NCoarseElement = NWorldFine//NWorldCoarse
         NtCoarse = np.prod(NWorldCoarse)
         NpCoarse = np.prod(NWorldCoarse+1)
         
@@ -382,7 +382,7 @@ class PetrovGalerkinLOD_TestCase(unittest.TestCase):
         NpFine = np.prod(NWorldFine+1)
         NtFine = np.prod(NWorldFine)
         NWorldCoarse = np.array([6, 22, 5])
-        NCoarseElement = NWorldFine/NWorldCoarse
+        NCoarseElement = NWorldFine//NWorldCoarse
         NtCoarse = np.prod(NWorldCoarse)
         NpCoarse = np.prod(NWorldCoarse+1)
         
@@ -395,11 +395,11 @@ class PetrovGalerkinLOD_TestCase(unittest.TestCase):
         #aBase = aBase[::8]
 
         
-        print 'a'
+        print('a')
         coords = util.pCoordinates(NWorldFine)
         gFine = 1-coords[:,1]
         uFineFull, AFine, _ = femsolver.solveFine(world, aBase, None, -gFine, boundaryConditions)
-        print 'b'
+        print('b')
         
         rCoarse = np.ones(NtCoarse)
         
@@ -435,14 +435,14 @@ class PetrovGalerkinLOD_TestCase(unittest.TestCase):
             uCube = np.reshape(uCoarse, (NWorldCoarse+1)[::-1])
             uCube = np.ascontiguousarray(np.transpose(uCube, axes=[2, 1, 0]))
             
-            imageToVTK("./image", pointData = {"u" : uCube} )
+            #imageToVTK("./image", pointData = {"u" : uCube} )
 
         if False:
             coord = util.pCoordinates(NWorldCoarse)
             uCoarse = coord[:,1].flatten()
             uCube = np.reshape(uCoarse, (NWorldCoarse+1)[::-1])
             uCube = np.ascontiguousarray(np.transpose(uCube, axes=[2, 1, 0]))
-            imageToVTK("./image", pointData = {"u" : uCube} )
+            #imageToVTK("./image", pointData = {"u" : uCube} )
             
         # basis = fem.assembleProlongationMatrix(NWorldCoarse, NCoarseElement)
         # basisCorrectors = pglod.assembleBasisCorrectors()
@@ -469,7 +469,7 @@ class PetrovGalerkinLOD_TestCase(unittest.TestCase):
         NpFine = np.prod(NWorldFine+1)
         NtFine = np.prod(NWorldFine)
         NWorldCoarse = np.array([4, 4])
-        NCoarseElement = NWorldFine/NWorldCoarse
+        NCoarseElement = NWorldFine//NWorldCoarse
         NtCoarse = np.prod(NWorldCoarse)
         NpCoarse = np.prod(NWorldCoarse+1)
         

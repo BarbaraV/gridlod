@@ -1,6 +1,7 @@
 import unittest
 import numpy as np
 import itertools as it
+import functools
 
 from gridlod import lod, fem, interp, util, coef, world
 from gridlod.world import World
@@ -172,7 +173,7 @@ class corrector_TestCase(unittest.TestCase):
         coefficientPatch = coef.coefficientFine(ec.NPatchCoarse, NCoarseElement, np.ones(NtPatch))
         ec.computeCorrectors(coefficientPatch, IPatch)
 
-        correctorSum = reduce(np.add, ec.fsi.correctorsList)
+        correctorSum = functools.reduce(np.add, ec.fsi.correctorsList)
         self.assertTrue(np.allclose(correctorSum, 0))
 
         ec.computeCoarseQuantities()

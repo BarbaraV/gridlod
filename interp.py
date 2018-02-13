@@ -1,5 +1,6 @@
 import numpy as np
 import scipy.sparse as sparse
+import functools
 
 import util
 import fem
@@ -76,7 +77,7 @@ def uncoupledL2ProjectionCoarseElementMatrix(NCoarseElement):
         PhiTMCorner[:,cornerInd] = np.dot(Phi.T[:,cornerInd], MLoc)
         PhiTMCornersList.append(PhiTMCorner)
 
-    PhiTMAllCorners = reduce(np.add, PhiTMCornersList)
+    PhiTMAllCorners = functools.reduce(np.add, PhiTMCornersList)
 
     # For each corner, compute
     #    P'*M - P'*MAllCorners + P'*MCorner

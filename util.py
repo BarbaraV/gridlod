@@ -1,5 +1,6 @@
 import numpy as np
 import copy
+import functools
 
 def linearpIndexBasis(N):
     """Compute basis b to convert from d-dimensional indices to linear indices.
@@ -58,7 +59,7 @@ def boundarypIndexMapLarge(N, boundaryMap=None):
         if boundaryMap[k][1]:
             kRange[k] = np.append(kRange[k], N[k])
         twoSides = np.meshgrid(*kRange)
-        twoSidesIndices = reduce(np.add, map(np.multiply, b, twoSides)).flatten()
+        twoSidesIndices = functools.reduce(np.add, list(map(np.multiply, b, twoSides))).flatten()
         allIndices = np.hstack([allIndices, twoSidesIndices])
     return np.unique(allIndices)
 

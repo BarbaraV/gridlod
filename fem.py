@@ -27,7 +27,7 @@ def localStiffnessMatrix(N):
     detJ = np.prod(1./N)
     def stiffnessMatrixBinaryIndices(ib, jb):
         M = detJ*(1 << np.sum(~(ib ^ jb), axis=0))/6.**d
-        A = M*np.sum(map(np.multiply, N**2, 3*(1-3*(ib ^ jb))), axis=0)
+        A = M*np.sum(list(map(np.multiply, N**2, 3*(1-3*(ib ^ jb)))), axis=0)
         return A
     
     return localMatrix(d, stiffnessMatrixBinaryIndices)
@@ -142,7 +142,6 @@ def assemblePatchBoundaryMatrix(NPatch, CLocGetter, aPatch=None, boundaryMap=Non
                 cols = np.hstack([cols, colsneg])
                 values = np.hstack([values, valuesneg])
 
-
     APatch = sparse.csc_matrix((values, (rows, cols)), shape=(Np, Np))
     APatch.eliminate_zeros()
     
@@ -178,7 +177,7 @@ def assemblePatchMatrixMatrixCoefficient(NPatch, ALocTensor, aPatch):
 
     APatch = sparse.csc_matrix((values, (rows, cols)), shape=(Np, Np))
     APatch.eliminate_zeros()
-    print values
+    print(values)
     return APatch
 
 def localBasis(N):
@@ -231,7 +230,7 @@ def assembleHierarchicalBasisMatrix(NPatchCoarse, NCoarseElement):
     # Use simplest possible hierarchy, divide by two in all dimensions
     NLevelElement = NCoarseElement.copy()
     while np.all(np.mod(NLevelElement, 2) == 0):
-        NLevelElement /= 2
+        NLevelElement = NLevelElement // 2
 
     assert np.all(NLevelElement == 1)
         

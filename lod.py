@@ -244,7 +244,7 @@ class elementCorrector:
         and store them in the self.fsi object, together with the extracted A|_{U_k(T)}
         '''
         d = np.size(self.NPatchCoarse)
-        ARhsList = map(np.squeeze, np.hsplit(self.world.localBasis, 2**d))
+        ARhsList = list(map(np.squeeze, np.hsplit(self.world.localBasis, 2**d)))
 
         correctorsList = self.computeElementCorrector(coefficientPatch, IPatch, ARhsList)
         
