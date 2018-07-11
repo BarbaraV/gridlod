@@ -19,20 +19,24 @@ def solveFine(world, aFine, wavenumberFine_neg_squared, wavenumberFine_neg_compl
         AbFine = np.zeros(NpFine)
 
     boundaryMapDirichlet = boundaryConditions == 0
-    boundaryMapRobin = (boundaryConditions == 1)
+    boundaryMapRobin = boundaryConditions == 1
     fixedFine = util.boundarypIndexMap(NWorldFine, boundaryMap=boundaryMapDirichlet)
     freeFine = np.setdiff1d(np.arange(NpFine), fixedFine)
     AFine = fem.assemblePatchMatrix(NWorldFine, world.ALocFine, aFine)
     MFine = fem.assemblePatchMatrix(NWorldFine, world.MLocFine, wavenumberFine_neg_squared)
     MFineMass = -1 * MFine
-    BdryFine = fem.assemblePatchBoundaryMatrix(NWorldFine, world.BLocGetterFine,
-                                               wavenumberFine_neg_complex, boundaryMapRobin)
     BdryFineMass = fem.assemblePatchBoundaryMatrix(NWorldFine, world.BLocGetterFine,
                                                    np.ones(NpFine), boundaryMapRobin)
 
-    bFine = MFine * MbFine + AFine * AbFine + BdryFineMass * BbFine
+    bFine = MFine * MbFine\
+            + fem.assemblePatchMatrix(NWorldFine, world.ALocFine, aFine) * AbFine\
+            + fem.assemblePatchBoundaryMatrix(NWorldFine, world.BLocGetterFine,
+                                                   np.ones(NpFine), boundaryMapRobin) * BbFine
 
-    BFineFree = AFine[freeFine][:, freeFine] + MFine[freeFine][:, freeFine] + BdryFine[freeFine][:, freeFine]
+    BFineFree = fem.assemblePatchMatrix(NWorldFine, world.ALocFine, aFine)[freeFine][:, freeFine]\
+                + fem.assemblePatchMatrix(NWorldFine, world.MLocFine, wavenumberFine_neg_squared)[freeFine][:, freeFine]\
+                + fem.assemblePatchBoundaryMatrix(NWorldFine, world.BLocGetterFine,
+                                               wavenumberFine_neg_complex, boundaryMapRobin)[freeFine][:, freeFine]
     bFineFree = bFine[freeFine]
 
     uFineFree = linalg.linSolve(BFineFree, bFineFree)
@@ -58,16 +62,17 @@ def solveCoarse(world, aFine, wavenumberFine_neg_squared, wavenumberFine_neg_com
     if AbFine is None:
         AbFine = np.zeros(NpFine)
 
-    boundaryMap = boundaryConditions == 0
-    fixedCoarse = util.boundarypIndexMap(NWorldCoarse, boundaryMap=boundaryMap)
+    boundaryMapDirichlet = boundaryConditions == 0
+    boundaryMapRobin = boundaryConditions == 1
+    fixedCoarse = util.boundarypIndexMap(NWorldCoarse, boundaryMap=boundaryMapDirichlet)
     freeCoarse = np.setdiff1d(np.arange(NpCoarse), fixedCoarse)
 
     AFine = fem.assemblePatchMatrix(NWorldFine, world.ALocFine, aFine)
     MFine = fem.assemblePatchMatrix(NWorldFine, world.MLocFine, wavenumberFine_neg_squared)
-    BdryFine = fem.assemblePatchBoundaryMatrix(NWorldFine, world._BLocGetterFine,
-                                               wavenumberFine_neg_complex, boundaryMap)
-    BdryFineMass = fem.assemblePatchBoundaryMatrix(NWorldFine, world._BLocGetterFine,
-                                                   np.ones(NpFine), boundaryMap)
+    BdryFine = fem.assemblePatchBoundaryMatrix(NWorldFine, world.BLocGetterFine,
+                                               wavenumberFine_neg_complex, boundaryMapRobin)
+    BdryFineMass = fem.assemblePatchBoundaryMatrix(NWorldFine, world.BLocGetterFine,
+                                                   np.ones(NpFine), boundaryMapRobin)
 
     bFine = MFine * MbFine + AFine * AbFine + BdryFineMass * BbFine
     BFine = AFine + MFine + BdryFine
@@ -80,9 +85,9 @@ def solveCoarse(world, aFine, wavenumberFine_neg_squared, wavenumberFine_neg_com
     bCoarseFree = bCoarse[freeCoarse]
 
     uCoarseFree = linalg.linSolve(BCoarseFree, bCoarseFree)
-    uCoarseFull = np.zeros(NpCoarse)
+    uCoarseFull = np.zeros(NpCoarse, dtype=complex)
     uCoarseFull[freeCoarse] = uCoarseFree
-    uCoarseFull = uCoarseFull
+    #uCoarseFull = uCoarseFull
 
     uFineFull = basis * uCoarseFull
 
