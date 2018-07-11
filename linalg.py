@@ -12,8 +12,8 @@ except ImportError:
     from scikits.sparse.cholmod import cholesky, analyze
 
 def linSolve(K, c):
-    if np.size(K,0) > 2e5:
-        linSolver = 'spsolve'
+    if np.size(K,0) > 2e4:
+        linSolver = 'bicgstab'
     else:
         linSolver = 'spsolve'
 
@@ -33,6 +33,14 @@ def linSolve(K, c):
     elif linSolver == 'cholesky':
         cholK = cholesky(K)
         x = cholK.solve_A(c)
+    elif linSolver == 'bicgstab':
+        DHalfInvDiag = 1. / np.sqrt(K.diagonal())
+        DHalfInv = sparse.diags([DHalfInvDiag], offsets=[0])
+        B = DHalfInv * (K * DHalfInv)
+        d = DHalfInv * c
+
+        y, info = sparse.linalg.bicgstab(B, d, tol=1e-9)
+        x = DHalfInv * y
     return x
 
 def saddleDirect(A, B, rhsList, fixed):
@@ -41,9 +49,9 @@ def saddleDirect(A, B, rhsList, fixed):
 
     xList = []
     for rhs in rhsList:
-        b = np.zeros(K.shape[0])
+        b = np.zeros(K.shape[0], dtype=rhs.dtype)
         b[:np.size(rhs)] = rhs
-        xAll = sparse.linalg.spsolve(K, b, use_umfpack=False)
+        xAll = sparse.linalg.spsolve(K, b, use_umfpack=True)
         xList.append(xAll[:np.size(rhs)])
 
     return xList
@@ -488,6 +496,36 @@ def schurComplementSolve(A, B, bList, fixed, NPatchCoarse=None, NCoarseElement=N
         #q = luA.solve(r)
         #q = luA_approx.solve(r)
         q = cholA.solve_A(r)
+        lam = np.dot(invS, B*q)
+        correctorFree = q - np.dot(Y,lam)
+        correctorFreeList.append(correctorFree)
+    return correctorFreeList
+
+def schurComplementSolveLU(A, B, bList, fixed, NPatchCoarse=None, NCoarseElement=None, cholCache=None):
+    correctorFreeList = []
+
+    # Pre-processing (page 12, Engwer, Henning, Malqvist)
+    # Rename for brevity
+    A = imposeBoundaryConditionsStronglyOnMatrix(A, fixed)
+    bList = [imposeBoundaryConditionsStronglyOnVector(b, fixed) for b in bList]
+    B = imposeBoundaryConditionsStronglyOnInterpolation(B, fixed)
+
+    # Compute Y
+    luA = sparse.linalg.spilu(A)
+
+    Y = np.zeros((B.shape[1], B.shape[0]))
+    for y, c in zip(Y.T, B):
+        y[:] = luA.solve(np.array(c.todense()).T.squeeze())
+        #y[:] = luA_approx.solve(np.array(c.todense()).T.squeeze())
+
+    S = B*Y
+    invS = np.linalg.inv(S)
+
+    # Post-processing
+    for b in bList:
+        r = b
+        q = luA.solve(r)
+        #q = luA_approx.solve(r)
         lam = np.dot(invS, B*q)
         correctorFree = q - np.dot(Y,lam)
         correctorFreeList.append(correctorFree)

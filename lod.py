@@ -60,6 +60,13 @@ class schurComplementSolver:
     def solve(self, A, I, bList, fixed, NPatchCoarse=None, NCoarseElement=None):
         return linalg.schurComplementSolve(A, I, bList, fixed, NPatchCoarse, NCoarseElement, self.cholCache)
 
+class schurComplementSolverLU:
+    def __init__(self):
+        pass
+
+    def solve(self, A, I, bList, fixed, NPatchCoarse=None, NCoarseElement=None):
+        return linalg.schurComplementSolveLU(A, I, bList, fixed, NPatchCoarse, NCoarseElement, self.cholCache)
+
 class directSolver:
     def __init__(self):
         pass
@@ -110,7 +117,7 @@ def ritzProjectionToFinePatchWithGivenSaddleSolver(world,
 
     # Using schur complement solver for the case when there are no
     # Dirichlet conditions does not work. Fix if necessary.
-    assert(np.any(boundaryMap == True))
+    #assert(np.any(boundaryMap == True))
     
     fixed = util.boundarypIndexMap(NPatchFine, boundaryMap)
     
