@@ -44,6 +44,10 @@ def linSolve(K, c):
     return x
 
 def saddleDirect(A, B, rhsList, fixed):
+    A = imposeBoundaryConditionsStronglyOnMatrix(A, fixed)
+    rhsList = [imposeBoundaryConditionsStronglyOnVector(rhs, fixed) for rhs in rhsList]
+    B = imposeBoundaryConditionsStronglyOnInterpolation(B, fixed)
+
     K = sparse.bmat([[A, B.T],
                      [B, None]], format='csc')
 
