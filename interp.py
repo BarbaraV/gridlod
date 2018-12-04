@@ -51,6 +51,42 @@ def L2ProjectionPatchMatrix(iPatchCoarse, NPatchCoarse, NWorldCoarse, NCoarseEle
         
     return IL2ProjectionPatch
 
+
+def weightedL2ProjectionCoarseElementMatrix(NCoarseElement, coeff):
+    NpFine = np.prod(NCoarseElement + 1)
+    NpCoarse = 2 ** np.size(NCoarseElement)
+
+    MLoc = fem.localMassMatrix(NCoarseElement)
+    MElement = fem.assemblePatchMatrix(NCoarseElement, MLoc, coeff)
+    Phi = fem.localBasis(NCoarseElement)
+
+    PhiTM = Phi.T * MElement
+    PhiTMPhi = np.dot(PhiTM, Phi)
+
+    IDense = np.dot(np.linalg.inv(PhiTMPhi), PhiTM)
+    I = sparse.coo_matrix(IDense)
+    return I
+
+
+def weightedL2ProjectionPatchMatrix(iPatchCoarse, NPatchCoarse, NWorldCoarse, NCoarseElement, coeff, boundaryConditions=None):
+    NPatchFine = NPatchCoarse * NCoarseElement
+
+    #coeffPatch = coeff.localize(iPatchCoarse, NPatchCoarse)
+    coeffPatchFine = coeff.aFine
+    elementFinetIndexMap = util.extractElementFine(NWorldCoarse,
+                                                   NCoarseElement,
+                                                   iPatchCoarse,
+                                                   extractElements=True)
+    IElement = weightedL2ProjectionCoarseElementMatrix(NCoarseElement, coeffPatchFine[elementFinetIndexMap])
+    IPatch = assemblePatchInterpolationMatrix(IElement, NPatchFine, NCoarseElement)
+    AvgPatch = assemblePatchNodeAveragingMatrix(iPatchCoarse, NPatchCoarse, NWorldCoarse)
+    IL2ProjectionPatch = AvgPatch * IPatch
+    if boundaryConditions is not None:
+        BcPatch = assemblePatchBoundaryConditionMatrix(iPatchCoarse, NPatchCoarse, NWorldCoarse, boundaryConditions)
+        IL2ProjectionPatch = BcPatch * IL2ProjectionPatch
+
+    return IL2ProjectionPatch
+
 def uncoupledL2ProjectionCoarseElementMatrix(NCoarseElement):
     d = np.size(NCoarseElement)
     
@@ -108,7 +144,8 @@ def assemblePatchInterpolationMatrix(IElement, NPatchFine, NCoarseElement):
 
     d = np.size(NPatchFine)
     
-    NPatchCoarse = NPatchFine/NCoarseElement
+    NPatchCoarse = np.asarray(NPatchFine/NCoarseElement, dtype='int64')
+    #NPatchCoarse.astype(int)
 
     NpFine = np.prod(NPatchFine+1)
     NpCoarse = np.prod(NPatchCoarse+1)
@@ -128,7 +165,7 @@ def assemblePatchInterpolationMatrix(IElement, NPatchFine, NCoarseElement):
     fullCols = np.add.outer(pFineInd, raisedCols).flatten()
     fullData = np.tile(IElementCoo.data, np.size(pFineInd))
 
-    I = sparse.csr_matrix((fullData, (fullRows, fullCols)), shape=(NpCoarse, NpFine))
+    I = sparse.csr_matrix((fullData, (fullRows, fullCols)), shape=(int(NpCoarse), NpFine))
     
     return I
 
