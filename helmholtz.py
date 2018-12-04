@@ -18,6 +18,10 @@ def solveFine(world, aFine, wavenumberFine_neg_squared, wavenumberFine_neg_compl
     if AbFine is None:
         AbFine = np.zeros(NpFine)
 
+
+    if BbFine is None:
+        BbFine = np.zeros(NpFine)
+
     boundaryMapDirichlet = boundaryConditions == 0
     boundaryMapRobin = boundaryConditions == 1
     fixedFine = util.boundarypIndexMap(NWorldFine, boundaryMap=boundaryMapDirichlet)

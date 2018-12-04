@@ -428,20 +428,28 @@ class PetrovGalerkinLOD:
         return B
 
     def solve(self, f, g, boundaryConditions):
-        assert (f is None)
+        #assert (f is None)
 
         world = self.world
         NWorldCoarse = world.NWorldCoarse
         NpCoarse = np.prod(NWorldCoarse + 1)
 
+
+        if f is None:
+            f = np.zeros(NpCoarse)
+
+        if g is None:
+            g = np.zeros(NpCoarse)
+
+        MMs = self.assembleMsMassMatrix()
         BFull = self.assembleBoundaryMatrix()
 
         fixed = util.boundarypIndexMap(NWorldCoarse, boundaryConditions == 0)
         free = np.setdiff1d(np.arange(NpCoarse), fixed)
-        bFull = 1j * BFull * g    #to account for wrong sign in BFull; attention: BFull contains wavenumber!
+        bFull = 1j * BFull * g  - MMs *f  #to account for wrong sign in BFull and MMs; attention: BFull and Mms contain wavenumber!
 
         AmsFree = self.assembleMsStiffnessMatrix()[free][:, free] \
-                  + self.assembleMsMassMatrix()[free][:, free]\
+                  + MMs[free][:, free]\
                   + self.assembleMsBoundaryMatrix()[free][:, free]
         bFree = bFull[free]
 
