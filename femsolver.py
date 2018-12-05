@@ -6,7 +6,7 @@ import util
 import fem
 import linalg
 
-def solveFine(world, aFine, MbFine, AbFine, boundaryConditions):
+def solveFine(world, aFine, MbFine, AbFine, boundaryConditions, massFine=None):
     NWorldCoarse = world.NWorldCoarse
     NWorldFine = world.NWorldCoarse*world.NCoarseElement
     NpFine = np.prod(NWorldFine+1)
@@ -22,20 +22,26 @@ def solveFine(world, aFine, MbFine, AbFine, boundaryConditions):
     freeFine  = np.setdiff1d(np.arange(NpFine), fixedFine)
     AFine = fem.assemblePatchMatrix(NWorldFine, world.ALocFine, aFine)
     MFine = fem.assemblePatchMatrix(NWorldFine, world.MLocFine)
+    SFine = AFine.copy()
 
-    bFine = MFine*MbFine + AFine*AbFine
+    if massFine is not None:
+        SFine +=fem.assemblePatchMatrix(NWorldFine, world.MLocFine, massFine)
+    bFine = MFine*MbFine + SFine*AbFine
     
-    AFineFree = AFine[freeFine][:,freeFine]
+    SFineFree = SFine[freeFine][:,freeFine]
     bFineFree = bFine[freeFine]
 
-    uFineFree = linalg.linSolve(AFineFree, bFineFree)
+    uFineFree = linalg.linSolve(SFineFree, bFineFree)
     uFineFull = np.zeros(NpFine)
     uFineFull[freeFine] = uFineFree
     uFineFull = uFineFull
 
-    return uFineFull, AFine, MFine
+    if massFine is None:
+        return uFineFull, AFine, MFine
+    else:
+        return uFineFull, AFine, MFine, SFine
 
-def solveCoarse(world, aFine, MbFine, AbFine, boundaryConditions):
+def solveCoarse(world, aFine, MbFine, AbFine, boundaryConditions, massFine=None):
     NWorldCoarse = world.NWorldCoarse
     NWorldFine = world.NWorldCoarse*world.NCoarseElement
     NCoarseElement = world.NCoarseElement
@@ -55,17 +61,20 @@ def solveCoarse(world, aFine, MbFine, AbFine, boundaryConditions):
     
     AFine = fem.assemblePatchMatrix(NWorldFine, world.ALocFine, aFine)
     MFine = fem.assemblePatchMatrix(NWorldFine, world.MLocFine)
+    SFine = AFine.copy()
 
-    bFine = MFine*MbFine + AFine*AbFine
+    if massFine is not None:
+        SFine +=fem.assemblePatchMatrix(NWorldFine, world.MLocFine, massFine)
+    bFine = MFine*MbFine + SFine*AbFine
 
     basis = fem.assembleProlongationMatrix(NWorldCoarse, NCoarseElement)
     bCoarse = basis.T*bFine
-    ACoarse = basis.T*(AFine*basis)
+    SCoarse = basis.T*(SFine*basis)
 
-    ACoarseFree = ACoarse[freeCoarse][:,freeCoarse]
+    SCoarseFree = SCoarse[freeCoarse][:,freeCoarse]
     bCoarseFree = bCoarse[freeCoarse]
 
-    uCoarseFree = linalg.linSolve(ACoarseFree, bCoarseFree)
+    uCoarseFree = linalg.linSolve(SCoarseFree, bCoarseFree)
     uCoarseFull = np.zeros(NpCoarse)
     uCoarseFull[freeCoarse] = uCoarseFree
     uCoarseFull = uCoarseFull

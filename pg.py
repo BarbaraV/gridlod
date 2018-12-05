@@ -24,10 +24,15 @@ class PetrovGalerkinLOD:
         self.K = None
         self.basisCorrectors = None
         self.coefficient = None
+        self.mass = None
+        self.Mms = None
+        self.M = None
+        self.Mweighted = None
+        self.Mmsweighted = None
 
         eccontroller.clearWorkers()
         
-    def updateCorrectors(self, coefficient, clearFineQuantities=True):
+    def updateCorrectors(self, coefficient, clearFineQuantities=True, mass=None):
         world = self.world
         k = self.k
         IPatchGenerator = self.IPatchGenerator
@@ -38,11 +43,17 @@ class PetrovGalerkinLOD:
         saddleSolver = lod.schurComplementSolver(world.NWorldCoarse*world.NCoarseElement)
 
         self.coefficient = deepcopy(coefficient)
+        if mass is not None:
+            self.mass = deepcopy(mass)
         
         # Reset all caches
         self.Kms = None
         self.K = None
         self.basisCorrectors = None
+        self.M = None
+        self.Mweighted = None
+        self.Mms = None
+        self.Mmsweighted = None
         
         if self.ecList is None:
             self.ecList = [None]*NtCoarse
@@ -55,7 +66,7 @@ class PetrovGalerkinLOD:
 
         if self.printLevel >= 2:
             print('Setting up workers')
-        eccontroller.setupWorker(world, coefficient, IPatchGenerator, k, clearFineQuantities, self.printLevel)
+        eccontroller.setupWorker(world, coefficient, IPatchGenerator, k, clearFineQuantities, self.printLevel, mass)
         if self.printLevel >= 2:
             print('Done')
             
@@ -118,6 +129,7 @@ class PetrovGalerkinLOD:
         NtCoarse = np.prod(self.world.NWorldCoarse)
         self.ecList = None
         self.coefficient = None
+        self.mass = None
 
     def computeCorrection(self, ARhsFull=None, MRhsFull=None):
         assert(self.ecList is not None)
@@ -132,6 +144,7 @@ class PetrovGalerkinLOD:
         
         coefficient = self.coefficient
         IPatchGenerator = self.IPatchGenerator
+        mass = self.mass
 
         localBasis = world.localBasis
         
@@ -159,8 +172,12 @@ class PetrovGalerkinLOD:
                 MRhsList = [MRhsFull[TpStartIndices[TInd] + TpIndexMap]]
             else:
                 MRhsList = None
-                
-            correctorT = ecT.computeElementCorrector(coefficientPatch, IPatch, ARhsList, MRhsList)[0]
+
+            if mass is None:
+                correctorT = ecT.computeElementCorrector(coefficientPatch, IPatch, ARhsList, MRhsList)[0]
+            else:
+                massPatch = mass.localize(ecT.iPatchWorldCoarse, ecT.NPatchCoarse)
+                correctorT = ecT.computeElementCorrector(coefficientPatch, IPatch, ARhsList, MRhsList, massPatch)[0]
             
             NPatchFine = ecT.NPatchCoarse*NCoarseElement
             iPatchWorldFine = ecT.iPatchWorldCoarse*NCoarseElement
@@ -323,20 +340,192 @@ class PetrovGalerkinLOD:
 
         self.K = K
         return K
+
+    def assembleMsMassMatrix(self):
+        if self.Mms is not None:
+            return self.Mms
+
+        assert (self.ecList is not None)
+
+        world = self.world
+        NWorldCoarse = world.NWorldCoarse
+
+        NtCoarse = np.prod(world.NWorldCoarse)
+        NpCoarse = np.prod(world.NWorldCoarse + 1)
+
+        TpIndexMap = util.lowerLeftpIndexMap(np.ones_like(NWorldCoarse), NWorldCoarse)
+        TpStartIndices = util.lowerLeftpIndexMap(NWorldCoarse - 1, NWorldCoarse)
+
+        cols = []
+        rows = []
+        data = []
+        ecList = self.ecList
+        for TInd in range(NtCoarse):
+            ecT = ecList[TInd]
+            assert (ecT is not None)
+
+            NPatchCoarse = ecT.NPatchCoarse
+
+            patchpIndexMap = util.lowerLeftpIndexMap(NPatchCoarse, NWorldCoarse)
+            patchpStartIndex = util.convertpCoordinateToIndex(NWorldCoarse, ecT.iPatchWorldCoarse)
+
+            colsT = TpStartIndices[TInd] + TpIndexMap
+            rowsT = patchpStartIndex + patchpIndexMap
+            dataT = ecT.csi.Mmsij.flatten()
+
+            cols.extend(np.tile(colsT, np.size(rowsT)))
+            rows.extend(np.repeat(rowsT, np.size(colsT)))
+            data.extend(dataT)
+
+        Mms = sparse.csc_matrix((data, (rows, cols)), shape=(NpCoarse, NpCoarse))
+
+        self.Mms = Mms
+        return Mms
+
+    def assembleMassMatrix(self):
+        if self.M is not None:
+            return self.M
+
+        assert (self.ecList is not None)
+
+        world = self.world
+        NWorldCoarse = world.NWorldCoarse
+
+        NtCoarse = np.prod(world.NWorldCoarse)
+        NpCoarse = np.prod(world.NWorldCoarse + 1)
+
+        TpIndexMap = util.lowerLeftpIndexMap(np.ones_like(NWorldCoarse), NWorldCoarse)
+        TpStartIndices = util.lowerLeftpIndexMap(NWorldCoarse - 1, NWorldCoarse)
+
+        cols = []
+        rows = []
+        data = []
+        ecList = self.ecList
+        for TInd in range(NtCoarse):
+            ecT = ecList[TInd]
+            assert (ecT is not None)
+
+            NPatchCoarse = ecT.NPatchCoarse
+
+            colsT = TpStartIndices[TInd] + TpIndexMap
+            rowsT = TpStartIndices[TInd] + TpIndexMap
+            dataT = ecT.csi.Mij.flatten()
+
+            cols.extend(np.tile(colsT, np.size(rowsT)))
+            rows.extend(np.repeat(rowsT, np.size(colsT)))
+            data.extend(dataT)
+
+        M = sparse.csc_matrix((data, (rows, cols)), shape=(NpCoarse, NpCoarse))
+
+        self.M = M
+        return M
+
+    def assembleMsMassMatrixweighted(self):
+        if self.mass is None:
+            return NotImplementedError("computing weighted mass matrix without weight does not make sense")
+        if self.Mmsweighted is not None:
+            return self.Mmsweighted
+
+        assert (self.ecList is not None)
+
+        world = self.world
+        NWorldCoarse = world.NWorldCoarse
+
+        NtCoarse = np.prod(world.NWorldCoarse)
+        NpCoarse = np.prod(world.NWorldCoarse + 1)
+
+        TpIndexMap = util.lowerLeftpIndexMap(np.ones_like(NWorldCoarse), NWorldCoarse)
+        TpStartIndices = util.lowerLeftpIndexMap(NWorldCoarse - 1, NWorldCoarse)
+
+        cols = []
+        rows = []
+        data = []
+        ecList = self.ecList
+        for TInd in range(NtCoarse):
+            ecT = ecList[TInd]
+            assert (ecT is not None)
+
+            NPatchCoarse = ecT.NPatchCoarse
+
+            patchpIndexMap = util.lowerLeftpIndexMap(NPatchCoarse, NWorldCoarse)
+            patchpStartIndex = util.convertpCoordinateToIndex(NWorldCoarse, ecT.iPatchWorldCoarse)
+
+            colsT = TpStartIndices[TInd] + TpIndexMap
+            rowsT = patchpStartIndex + patchpIndexMap
+            dataT = ecT.csi.Mmsijweighted.flatten()
+
+            cols.extend(np.tile(colsT, np.size(rowsT)))
+            rows.extend(np.repeat(rowsT, np.size(colsT)))
+            data.extend(dataT)
+
+        Mmsweighted = sparse.csc_matrix((data, (rows, cols)), shape=(NpCoarse, NpCoarse))
+
+        self.Mmsweighted = Mmsweighted
+        return Mmsweighted
+
+    def assembleMassMatrixweighted(self):
+        if self.mass is None:
+            return NotImplementedError("computing weighted mass amtrix without weight does not make sense")
+        if self.Mweighted is not None:
+            return self.Mweighted
+
+        assert (self.ecList is not None)
+
+        world = self.world
+        NWorldCoarse = world.NWorldCoarse
+
+        NtCoarse = np.prod(world.NWorldCoarse)
+        NpCoarse = np.prod(world.NWorldCoarse + 1)
+
+        TpIndexMap = util.lowerLeftpIndexMap(np.ones_like(NWorldCoarse), NWorldCoarse)
+        TpStartIndices = util.lowerLeftpIndexMap(NWorldCoarse - 1, NWorldCoarse)
+
+        cols = []
+        rows = []
+        data = []
+        ecList = self.ecList
+        for TInd in range(NtCoarse):
+            ecT = ecList[TInd]
+            assert (ecT is not None)
+
+            NPatchCoarse = ecT.NPatchCoarse
+
+            colsT = TpStartIndices[TInd] + TpIndexMap
+            rowsT = TpStartIndices[TInd] + TpIndexMap
+            dataT = ecT.csi.Mijweighted.flatten()
+
+            cols.extend(np.tile(colsT, np.size(rowsT)))
+            rows.extend(np.repeat(rowsT, np.size(colsT)))
+            data.extend(dataT)
+
+        Mweighted = sparse.csc_matrix((data, (rows, cols)), shape=(NpCoarse, NpCoarse))
+
+        self.Mweighted = Mweighted
+        return Mweighted
     
     def solve(self, f, g, boundaryConditions):
-        assert(f is None)
+        #assert(f is None)
 
         world = self.world
         NWorldCoarse = world.NWorldCoarse
         NpCoarse = np.prod(NWorldCoarse+1)
+
+        if f is None:
+            f = np.zeros(NpCoarse)
+
+        if g is None:
+            g = np.zeros(NpCoarse)
         
         KmsFull = self.assembleMsStiffnessMatrix()
-        #MFull = fem.assemblePatchMatrix(NWorldCoarse, world.MLocCoarse)
+        if self.mass is not None:
+            KmsFull += self.assembleMsMassMatrixweighted()
         
         fixed = util.boundarypIndexMap(NWorldCoarse, boundaryConditions==0)
         free  = np.setdiff1d(np.arange(NpCoarse), fixed)
         bFull = KmsFull*g
+        if f is not None:
+            MmsFull = self.assembleMsMassMatrix()
+            bFull += MmsFull*f
         
         KmsFree = KmsFull[free][:,free]
         bFree = bFull[free]

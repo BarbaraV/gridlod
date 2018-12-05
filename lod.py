@@ -128,12 +128,14 @@ def ritzProjectionToFinePatchWithGivenSaddleSolver(world,
     return projectionsList
 
 class FineScaleInformation:
-    def __init__(self, coefficientPatch, correctorsList):
+    def __init__(self, coefficientPatch, correctorsList, massPatch = None):
         self.coefficient = coefficientPatch
         self.correctorsList = correctorsList
+        self.massPatch = massPatch
 
 class CoarseScaleInformation:
-    def __init__(self, Kij, Kmsij, muTPrime, correctorFluxTF, basisFluxTF, rCoarse=None):
+    def __init__(self, Kij, Kmsij, muTPrime, correctorFluxTF, basisFluxTF, rCoarse=None, Mij=None, Mmsij=None,
+                 Mijweighted=None, Mmsijweighted=None):
         self.Kij = Kij
         self.Kmsij = Kmsij
         #self.LTPrimeij = LTPrimeij
@@ -141,6 +143,10 @@ class CoarseScaleInformation:
         self.rCoarse = rCoarse
         self.correctorFluxTF = correctorFluxTF
         self.basisFluxTF = basisFluxTF
+        self.Mij = Mij
+        self.Mmsij = Mmsij
+        self.Mijweighted = Mijweighted
+        self.Mmsijweighted = Mmsijweighted
 
 class elementCorrector:
     def __init__(self, world, k, iElementWorldCoarse, saddleSolver=None):
@@ -170,7 +176,7 @@ class elementCorrector:
     def saddleSolver(self, value):
         self._saddleSolver = value
             
-    def computeElementCorrector(self, coefficientPatch, IPatch, ARhsList=None, MRhsList=None):
+    def computeElementCorrector(self, coefficientPatch, IPatch, ARhsList=None, MRhsList=None, massPatch=None):
         '''Compute the fine correctors over the patch.
 
         Compute the correctors
@@ -201,8 +207,13 @@ class elementCorrector:
         NpFine = np.prod(NPatchFine+1)
 
         aPatch = coefficientPatch.aFine
+        if massPatch is not None:
+            mPatch = massPatch.aFine
+        else:
+            mPatch = np.zeros(NtFine)
 
         assert(np.size(aPatch) == NtFine)
+        assert(np.size(mPatch) == NtFine)
 
         ALocFine = world.ALocFine
         MLocFine = world.MLocFine
@@ -219,9 +230,13 @@ class elementCorrector:
 
         if ARhsList is not None:
             AElementFull = fem.assemblePatchMatrix(NCoarseElement, ALocFine, aPatch[elementFinetIndexMap])
-        if MRhsList is not None:
+        if MRhsList is not None and massPatch is None:
             MElementFull = fem.assemblePatchMatrix(NCoarseElement, MLocFine)
+        if MRhsList is not None and massPatch is not None:
+            MElementFull = fem.assemblePatchMatrix(NCoarseElement, MLocFine, mPatch[elementFinetIndexMap])
         APatchFull = fem.assemblePatchMatrix(NPatchFine, ALocFine, aPatch)
+        if massPatch is not None:
+            APatchFull += fem.assemblePatchMatrix(NPatchFine, MLocFine, mPatch)
 
         bPatchFullList = []
         for rhsIndex in range(numRhs):
@@ -229,7 +244,7 @@ class elementCorrector:
             if ARhsList is not None:
                 bPatchFull[elementFinepIndexMap] += AElementFull*ARhsList[rhsIndex]
             if MRhsList is not None:
-                bPatchFull[elementFinepIndexMap] += MElementFull*MRhsList[rhsIndex]
+                bPatchFull[elementFinepIndexMap] += MElementFull*MRhsList[rhsIndex] #MElementFull already switched whether mPatch None or not
             bPatchFullList.append(bPatchFull)
 
         correctorsList = ritzProjectionToFinePatchWithGivenSaddleSolver(world,
@@ -241,7 +256,7 @@ class elementCorrector:
                                                                         self.saddleSolver)
         return correctorsList
 
-    def computeCorrectors(self, coefficientPatch, IPatch):
+    def computeCorrectors(self, coefficientPatch, IPatch, massPatch=None):
         '''Compute the fine correctors over the patch.
 
         Compute the correctors Q_T\lambda_i (T is given by the class instance):
@@ -252,10 +267,13 @@ class elementCorrector:
         '''
         d = np.size(self.NPatchCoarse)
         ARhsList = list(map(np.squeeze, np.hsplit(self.world.localBasis, 2**d)))
+        MRhsList = None
+        if massPatch is not None:
+            MRhsList = list(map(np.squeeze, np.hsplit(self.world.localBasis, 2**d)))
 
-        correctorsList = self.computeElementCorrector(coefficientPatch, IPatch, ARhsList)
+        correctorsList = self.computeElementCorrector(coefficientPatch, IPatch, ARhsList, MRhsList, massPatch)
         
-        self.fsi = FineScaleInformation(coefficientPatch, correctorsList)
+        self.fsi = FineScaleInformation(coefficientPatch, correctorsList, massPatch)
         
     def computeCoarseQuantities(self):
         '''Compute the coarse quantities K and L for this element corrector
@@ -289,6 +307,7 @@ class elementCorrector:
         aPatch = self.fsi.coefficient.aFine
 
         ALocFine = world.ALocFine
+        MLocFine = world.MLocFine
         localBasis = world.localBasis
 
         TPrimeCoarsepStartIndices = util.lowerLeftpIndexMap(NPatchCoarse-1, NPatchCoarse)
@@ -306,6 +325,9 @@ class elementCorrector:
         
         # This loop can probably be done faster than this. If a bottle-neck, fix!
         Kmsij = np.zeros((NpPatchCoarse, 2**d))
+        Mmsij = np.zeros((NpPatchCoarse, 2 ** d))
+        if self.fsi.massPatch is not None:
+            Mmsijweighted = np.zeros((NpPatchCoarse, 2 ** d))
         LTPrimeij = np.zeros((NTPrime, 2**d, 2**d))
         for (TPrimeInd, 
              TPrimeCoarsepStartIndex, 
@@ -323,17 +345,30 @@ class elementCorrector:
             BTPrimeij = np.dot(P.T, KTPrime*Q)
             CTPrimeij = np.dot(Q.T, KTPrime*Q)
             sigma = TPrimeCoarsepStartIndex + TPrimeCoarsepIndexMap
+            oneTPrime = np.ones(aTPrime.size)
+            MTPrime = fem.assemblePatchMatrix(NCoarseElement, MLocFine, oneTPrime)
+            if self.fsi.massPatch is not None:
+                mPatch = self.fsi.massPatch.aFine[TPrimeFinetStartIndex + TPrimeFinetIndexMap]
+                MTPrimeweighted = fem.assemblePatchMatrix(NCoarseElement, MLocFine, mPatch)
             if TPrimeInd == TInd:
                 Kij = np.dot(P.T, KTPrime*P)
+                Mij = np.dot(P.T, MTPrime*P)
+                if self.fsi.massPatch is not None:
+                    Mijweighted = np.dot(P.T, MTPrimeweighted*P)
+                    Mmsijweighted[sigma, :] += Mijweighted - np.dot(P.T, MTPrimeweighted*Q)
                 LTPrimeij[TPrimeInd] = CTPrimeij \
                                        - BTPrimeij \
                                        - BTPrimeij.T \
                                        + Kij
                 Kmsij[sigma,:] += Kij - BTPrimeij
+                Mmsij[sigma, :] += Mij - np.dot(P.T, MTPrime * Q)
                 
             else:
                 LTPrimeij[TPrimeInd] = CTPrimeij
                 Kmsij[sigma,:] += -BTPrimeij
+                Mmsij[sigma, :] += - np.dot(P.T, MTPrime * Q)
+                if self.fsi.massPatch is not None:
+                    Mmsijweighted[sigma, :] += - np.dot(P.T, MTPrimeweighted * Q)
 
         muTPrime = np.zeros(NTPrime)
         for TPrimeInd in np.arange(NTPrime):
@@ -360,7 +395,11 @@ class elementCorrector:
             rCoarse = self.fsi.coefficient.rCoarse
         else:
             rCoarse = None
-        self.csi = CoarseScaleInformation(Kij, Kmsij, muTPrime, correctorFluxTF, basisFluxTF, rCoarse)
+        if self.fsi.massPatch is not None:
+            self.csi = CoarseScaleInformation(Kij, Kmsij, muTPrime, correctorFluxTF, basisFluxTF, rCoarse, Mij, Mmsij,
+                                              Mijweighted, Mmsijweighted)
+        else:
+            self.csi = CoarseScaleInformation(Kij, Kmsij, muTPrime, correctorFluxTF, basisFluxTF, rCoarse, Mij, Mmsij)
 
     def clearFineQuantities(self):
         assert(hasattr(self, 'fsi'))

@@ -29,9 +29,9 @@ def mapComputations(ecComputeList, printLevel=0):
         # ar.wait_interactive()
         # return ar.get()
 
-def setupWorker(world, coefficient, IPatchGenerator, k, clearFineQuantities, printLevel):
+def setupWorker(world, coefficient, IPatchGenerator, k, clearFineQuantities, printLevel, mass=None):
     if not client:
-        ecworker.setupWorker(world, coefficient, IPatchGenerator, k, clearFineQuantities)
+        ecworker.setupWorker(world, coefficient, IPatchGenerator, k, clearFineQuantities, mass)
     else:
         print("Parallel not supported")
         # global sendAr

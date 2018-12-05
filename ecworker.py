@@ -10,6 +10,7 @@ saddleSolver = None
 k = None
 IPatchGenerator = None
 clearFineQuantities = None
+mass = None
 
 # for rCoarse
 aBase = None
@@ -46,12 +47,14 @@ def sendas(aTrueIn, aLaggingIn):
     aLagging = aLaggingIn
     coefficient = coef.coefficientFineWithLagging(world.NWorldCoarse, world.NCoarseElement, aTrue, aLagging)
     
-def setupWorker(worldIn, coefficientIn, IPatchGeneratorIn, kIn, clearFineQuantitiesIn):
-    global world, coefficient, saddleSolver, IPatchGenerator, k, clearFineQuantities
+def setupWorker(worldIn, coefficientIn, IPatchGeneratorIn, kIn, clearFineQuantitiesIn, massIn = None):
+    global world, coefficient, saddleSolver, IPatchGenerator, k, clearFineQuantities, mass
 
     world = worldIn
     if coefficientIn is not None:
         coefficient = coefficientIn
+    if massIn is not None:
+        mass = massIn
     saddleSolver = lod.schurComplementSolver(world.NWorldCoarse*world.NCoarseElement)
     k = kIn
     if IPatchGeneratorIn is not None:
@@ -65,9 +68,12 @@ def setupWorker(worldIn, coefficientIn, IPatchGeneratorIn, kIn, clearFineQuantit
 def computeElementCorrector(iElement):
     ecT = lod.elementCorrector(world, k, iElement, saddleSolver)
     coefficientPatch = coefficient.localize(ecT.iPatchWorldCoarse, ecT.NPatchCoarse)
+    massPatch = None
+    if mass is not None:
+        massPatch = mass.localize(ecT.iPatchWorldCoarse, ecT.NPatchCoarse)
     IPatch = IPatchGenerator(ecT.iPatchWorldCoarse, ecT.NPatchCoarse)
 
-    ecT.computeCorrectors(coefficientPatch, IPatch)
+    ecT.computeCorrectors(coefficientPatch, IPatch, massPatch)
     ecT.computeCoarseQuantities()
     if clearFineQuantities:
         ecT.clearFineQuantities()
