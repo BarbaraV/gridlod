@@ -11,17 +11,17 @@ from gridlod import interp, coef, util, fem, femsolver, pg
 from gridlod.world import World
 
 def test_2d_periodic():
-    NFine = np.array([1024, 1024])
+    NFine = np.array([512, 512])
     NpFine = np.prod(NFine + 1)
     NtFine = np.prod(NFine)
     NList = [4, 8, 16, 32, 64]
 
     #the diffusion parameter
-    scatterer_left = np.array([0.25, 0.25])
-    scatterer_right = np.array([0.75, 0.75])
+    scatterer_left = np.array([8./32., 11./32])
+    scatterer_right = np.array([11./32., 19./32.])
     inclusion_left = np.array([0.25, 0.25])
     inclusion_right = np.array([0.75, 0.75])
-    delta = 1./256.
+    delta = 1./32.
     inclusions = np.array((scatterer_right-scatterer_left)/delta, dtype=int)
     except_row = 1000
 
@@ -30,6 +30,8 @@ def test_2d_periodic():
 
     aBaseSquare = np.ones(NFine)
     aBaseSquare[int(scatterer_left[1] * NFine[1]):int(scatterer_right[1] * NFine[1]),
+    int(scatterer_left[0] * NFine[0]):int(scatterer_right[0] * NFine[0])] = delta**2
+    '''aBaseSquare[int(scatterer_left[1] * NFine[1]):int(scatterer_right[1] * NFine[1]),
           int(scatterer_left[0] * NFine[0]):int(scatterer_right[0] * NFine[0])] = eps_matrix
     for ii in range(inclusions[0]):
         for jj in range(inclusions[1]):
@@ -44,7 +46,7 @@ def test_2d_periodic():
                 stopindexcols = int((scatterer_left[0] + delta * (ii + inclusion_right[0])) * NFine[0])
                 startindexrows = int((scatterer_left[1] + delta * (jj + 0.375)) * NFine[1])
                 stopindexrows = int((scatterer_left[1] + delta * (jj + 0.625)) * NFine[1])
-                aBaseSquare[startindexrows:stopindexrows, startindexcols:stopindexcols] = (delta ** 2) * (eps_incl)
+                aBaseSquare[startindexrows:stopindexrows, startindexcols:stopindexcols] = (delta ** 2) * (eps_incl)'''
 
     aBase = aBaseSquare.ravel()
 
@@ -63,10 +65,9 @@ def test_2d_periodic():
 
 
     #volume term
-    #f = lambda x: (1.0+0j)*np.ones(shape=x.shape())
     ffine = np.ones(NpFine)
     #ffineSquare = np.zeros(NFine+1)
-    #ffineSquare[int(0*NFine[1]):int(0.25*NFine[1]), int(0*NFine[0]):int(0.25*NFine[0])]=1.0
+    #ffineSquare[int(0.5*NFine[1]):int(0.75*NFine[1])+1, int(0.5*NFine[0]):int(0.75*NFine[0])+1]=1.0
     #ffine = ffineSquare.ravel()
     #plt.imshow(ffineSquare, extent=(xfC.min(), xfC.max(), yfC.min(), yfC.max()), cmap=plt.cm.hot)
     #plt.show()
@@ -90,8 +91,7 @@ def test_2d_periodic():
         fcoarse = np.ones(NpCoarse)
 
         #fcoarseSquare = np.zeros(NWorldCoarse + 1)
-        #fcoarseSquare[int(0 * NWorldCoarse[1]):int(0.25 * NWorldCoarse[1]), int(0 * NWorldCoarse[0]):int(0.25 * NWorldCoarse[0])] = 1.0
-        #fcoarseSquare = fcoarseSquare / wavenumber**2
+        #fcoarseSquare[int(0.5 * NWorldCoarse[1]):int(0.75 * NWorldCoarse[1])+1, int(0.5 * NWorldCoarse[0]):int(0.75 * NWorldCoarse[0])+1] = 1.0
         #fcoarse = fcoarseSquare.ravel()
         #plt.imshow(fcoarseSquare.real, extent=(xcC.min(), xcC.max(), ycC.min(), ycC.max()), cmap=plt.cm.hot)
         #plt.show()
@@ -152,8 +152,109 @@ def test_2d_periodic():
             fig.colorbar(im2, ax=ax2)
             plt.show()
 
+def test_2d_periodic_eigenvals():
+    NFine = np.array([64, 64])
+    NpFine = np.prod(NFine + 1)
+    NtFine = np.prod(NFine)
+
+    #the diffusion parameter
+    scatterer_left = np.array([0., 0.])
+    scatterer_right = np.array([1., 1.])
+    inclusion_left = np.array([0.25, 0.])
+    inclusion_right = np.array([0.75, 1.0])
+    delta = 1./8.
+    inclusions = np.array((scatterer_right-scatterer_left)/delta, dtype=int)
+    except_row = 1000
+
+    eps_matrix = 64
+    eps_incl = 1
+
+    aBaseSquare = np.ones(NFine)
+    aBaseSquare[int(scatterer_left[1] * NFine[1]):int(scatterer_right[1] * NFine[1]),
+          int(scatterer_left[0] * NFine[0]):int(scatterer_right[0] * NFine[0])] = eps_matrix
+    for ii in range(inclusions[0]):
+        for jj in range(inclusions[1]):
+            if jj != except_row:
+                startindexcols = int((scatterer_left[0] + delta * (ii + inclusion_left[0])) * NFine[0])
+                stopindexcols = int((scatterer_left[0] + delta * (ii + inclusion_right[0])) * NFine[0])
+                startindexrows = int((scatterer_left[1] + delta * (jj + inclusion_left[1])) * NFine[1])
+                stopindexrows = int((scatterer_left[1] + delta * (jj + inclusion_right[1])) * NFine[1])
+                aBaseSquare[startindexrows:stopindexrows, startindexcols:stopindexcols] = (delta **2) * (eps_incl)
+            else:
+                startindexcols = int((scatterer_left[0] + delta * (ii + inclusion_left[0])) * NFine[0])
+                stopindexcols = int((scatterer_left[0] + delta * (ii + inclusion_right[0])) * NFine[0])
+                startindexrows = int((scatterer_left[1] + delta * (jj + 0.375)) * NFine[1])
+                stopindexrows = int((scatterer_left[1] + delta * (jj + 0.625)) * NFine[1])
+                aBaseSquare[startindexrows:stopindexrows, startindexcols:stopindexcols] = (delta ** 2) * (eps_incl)
+
+    aBase = aBaseSquare.ravel()
+
+    #lower order term
+    mass = 1
+    massBaseSquare = mass * np.ones(NFine)
+    massBase = massBaseSquare.ravel()
+
+    coordsFine = util.pCoordinates(NFine)
+    xfC = coordsFine[:, 0]
+    yfC = coordsFine[:, 1]
+
+    #aBaseGrid=aBase.reshape(NFine)
+    plt.imshow(aBaseSquare.real, extent=(xfC.min(), xfC.max(), yfC.min(), yfC.max()), cmap=plt.cm.hot)
+    plt.show()
+
+
+    #volume term
+    #f = lambda x: (1.0+0j)*np.ones(shape=x.shape())
+    ffine = np.ones(NpFine)
+    #ffineSquare = np.zeros(NFine+1)
+    #ffineSquare[int(0*NFine[1]):int(0.25*NFine[1]), int(0*NFine[0]):int(0.25*NFine[0])]=1.0
+    #ffine = ffineSquare.ravel()
+    #plt.imshow(ffineSquare, extent=(xfC.min(), xfC.max(), yfC.min(), yfC.max()), cmap=plt.cm.hot)
+    #plt.show()
+
+    NWorldCoarse = np.array([NFine[0],NFine[1]])
+    NpCoarse = np.prod(NWorldCoarse+1)
+    NCoarseElement = NFine // NWorldCoarse
+
+    #dirichlet bdry conditions
+    boundaryConditions = np.array([[0, 0], [0, 0]])
+    world = World(NWorldCoarse, NCoarseElement, boundaryConditions)
+
+    aCoef = coef.coefficientFine(NWorldCoarse, NCoarseElement, aBase)
+    massCoeff = coef.coefficientFine(NWorldCoarse, NCoarseElement, massBase)
+
+    coordsCoarse = util.pCoordinates(NWorldCoarse)
+    xcC = coordsCoarse[:, 0]
+    ycC = coordsCoarse[:, 1]
+
+    fcoarse = np.ones(NpCoarse)
+
+    #fcoarseSquare = np.zeros(NWorldCoarse + 1)
+    #fcoarseSquare[int(0 * NWorldCoarse[1]):int(0.25 * NWorldCoarse[1]), int(0 * NWorldCoarse[0]):int(0.25 * NWorldCoarse[0])] = 1.0
+    #fcoarseSquare = fcoarseSquare / wavenumber**2
+    #fcoarse = fcoarseSquare.ravel()
+    #plt.imshow(fcoarseSquare.real, extent=(xcC.min(), xcC.max(), ycC.min(), ycC.max()), cmap=plt.cm.hot)
+    #plt.show()
+
+    # reference solution
+    uFine, AFine, MFine, SFine = femsolver.solveFine(world, aCoef.aFine,
+                                                 ffine, None, boundaryConditions, massCoeff.aFine) #MFine is unweighted
+    uFineGrid = uFine.reshape(NFine + 1, order='C')
+
+    lamb, _ = sparse.linalg.eigs(AFine, 20, MFine, which='SR')
+    print(lamb)
+    #print(SFine.shape)
+    #print(SFine[0, 0])
+
+    fig = plt.figure()
+    ax1 = fig.add_subplot(1,1,1)
+
+    im2 = ax1.imshow(uFineGrid.real, extent=(xcC.min(), xcC.max(), ycC.min(), ycC.max()), cmap=plt.cm.hot)
+    fig.colorbar(im2, ax=ax1)
+    plt.show()
 
 
 
 if __name__ == '__main__':
     test_2d_periodic()
+    #test_2d_periodic_eigenvals()
