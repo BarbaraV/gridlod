@@ -1,10 +1,10 @@
 import numpy as np
 import scipy.sparse as sparse
 
-from world import World
-import util
-import fem
-import linalg
+from .world import World
+from . import util
+from . import fem
+from . import linalg
 
 def solveFine(world, aFine, MbFine, AbFine, boundaryConditions):
     NWorldCoarse = world.NWorldCoarse
@@ -20,7 +20,13 @@ def solveFine(world, aFine, MbFine, AbFine, boundaryConditions):
     boundaryMap = boundaryConditions==0
     fixedFine = util.boundarypIndexMap(NWorldFine, boundaryMap=boundaryMap)
     freeFine  = np.setdiff1d(np.arange(NpFine), fixedFine)
-    AFine = fem.assemblePatchMatrix(NWorldFine, world.ALocFine, aFine)
+
+    if aFine.ndim == 1:
+        ALocFine = world.ALocFine
+    else:
+        ALocFine = world.ALocMatrixFine
+
+    AFine = fem.assemblePatchMatrix(NWorldFine, ALocFine, aFine)
     MFine = fem.assemblePatchMatrix(NWorldFine, world.MLocFine)
     
     bFine = MFine*MbFine + AFine*AbFine
@@ -52,8 +58,13 @@ def solveCoarse(world, aFine, MbFine, AbFine, boundaryConditions):
     boundaryMap = boundaryConditions==0
     fixedCoarse = util.boundarypIndexMap(NWorldCoarse, boundaryMap=boundaryMap)
     freeCoarse  = np.setdiff1d(np.arange(NpCoarse), fixedCoarse)
-    
-    AFine = fem.assemblePatchMatrix(NWorldFine, world.ALocFine, aFine)
+
+    if aFine.ndim == 1:
+        ALocFine = world.ALocFine
+    else:
+        ALocFine = world.ALocMatrixFine
+
+    AFine = fem.assemblePatchMatrix(NWorldFine, ALocFine, aFine)
     MFine = fem.assemblePatchMatrix(NWorldFine, world.MLocFine)
 
     bFine = MFine*MbFine + AFine*AbFine

@@ -1,5 +1,6 @@
 import numpy as np
 import copy
+from functools import reduce
 
 def linearpIndexBasis(N):
     """Compute basis b to convert from d-dimensional indices to linear indices.
@@ -11,11 +12,11 @@ def linearpIndexBasis(N):
 
     ind contains the linear index for point (1,2,3).
     """
-    cp = np.cumprod(N+1)
+    cp = np.cumprod(N+1, dtype='int64')
     b = np.hstack([[1], cp[:-1]])
     return b
 
-def convertpIndexToCoordinate(N, ind):
+def convertpLinearIndexToCoordIndex(N, ind):
     ind = np.array(ind)
     d = np.size(N)
     if ind.ndim > 0:
@@ -30,9 +31,9 @@ def convertpIndexToCoordinate(N, ind):
     assert(np.all(ind == 0))
     return coord
 
-def convertpCoordinateToIndex(N, coord):
+def convertpCoordIndexToLinearIndex(N, coord):
     basis = linearpIndexBasis(N)
-    return np.dot(basis, coord)
+    return np.dot(coord, basis)
 
 def interiorpIndexMap(N):
     """Compute indices (linear order) of all interior points."""
@@ -58,7 +59,7 @@ def boundarypIndexMapLarge(N, boundaryMap=None):
         if boundaryMap[k][1]:
             kRange[k] = np.append(kRange[k], N[k])
         twoSides = np.meshgrid(*kRange)
-        twoSidesIndices = reduce(np.add, map(np.multiply, b, twoSides)).flatten()
+        twoSidesIndices = reduce(np.add, list(map(np.multiply, b, twoSides))).flatten()
         allIndices = np.hstack([allIndices, twoSidesIndices])
     return np.unique(allIndices)
 
@@ -124,7 +125,7 @@ def lowerLeftpIndexMap(NFrom, NTo):
 
 def fillpIndexMap(NCoarse, NFine):
     assert np.all(np.mod(NFine, NCoarse) == 0)
-    NStep = NFine/NCoarse
+    NStep = NFine//NCoarse
     return pIndexMap(NCoarse, NFine, NStep)
 
 def cornerIndices(N):
@@ -170,7 +171,7 @@ def pCoordinates(NWorld, iPatch=None, NPatch=None):
     p = np.empty((Np,0))
     for k in range(d):
         fk = lambda *index: index[d-k-1]
-        newrow = np.fromfunction(fk, shape=NPatch[::-1]+1).flatten()
+        newrow = np.fromfunction(fk, shape=NPatch[::-1]+1, dtype='int64').flatten()
         newrow = (iPatch[k]+newrow)/NWorld[k]
         p = np.column_stack([p, newrow])
     return p

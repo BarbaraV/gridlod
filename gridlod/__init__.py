@@ -4,6 +4,6 @@ from . import util
 from . import linalg
 from . import lod
 from . import femsolver
-from . import pg
+from . import func
 from . import transport
 
