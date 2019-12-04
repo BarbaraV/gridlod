@@ -175,6 +175,7 @@ def nonlinear_adaptive(NFine,NCoarse,k,Anonlin,rhs,u0,Amicro0,Alin,tolmacro,tolm
         print('computing error indicators', end='', flush=True)
         E_vh = list(map(computeIndicators, range(world.NtCoarse)))
         print()
+        print('maximal value error estimator {}'.format(np.max(E_vh)))
         E_vh = {i: E_vh[i] for i in range(np.size(E_vh)) if E_vh[i] > 0}
 
         #loop over elements with possible recomputation of correctors
