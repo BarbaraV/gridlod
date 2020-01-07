@@ -3,7 +3,7 @@ import numpy as np
 import scipy.sparse as sparse
 import matplotlib.pyplot as plt
 
-from gridlod import pglod, util, lod, interp, coef, fem
+from gridlod import pglod, util, lod, interp, coef, fem, func
 from gridlod.world import World, Patch
 
 
@@ -60,6 +60,7 @@ def nonlinear_adaptive(NFine,NCoarse,k,Anonlin,rhs,u0,Amicro0,Alin,tolmacro,tolm
     rhs = rhs(pcoords)
 
     MFull = fem.assemblePatchMatrix(world.NWorldFine, world.MLocFine)
+    norm_of_rhs = [np.sqrt(np.dot(rhs, MFull * rhs))]
 
     def computeKmsij(TInd):
         patch = Patch(world, k, TInd)
@@ -71,13 +72,38 @@ def nonlinear_adaptive(NFine,NCoarse,k,Anonlin,rhs,u0,Amicro0,Alin,tolmacro,tolm
         csi = lod.computeBasisCoarseQuantities(patch, correctorsList, amacroPatch)
         return patch, correctorsList, csi.Kmsij, csi
 
+    def computeRmsi(TInd):
+        patch = Patch(world, k, TInd)
+        IPatch = lambda: interp.L2ProjectionPatchMatrix(patch, boundaryConditions)
+        amicroPatch = lambda: coef.localizeCoefficient(patch, amicro)
+        amacroPatch = lambda: coef.localizeCoefficient(patch, amacro)
+
+        MRhsList = [rhs[util.extractElementFine(world.NWorldCoarse,
+                                                  world.NCoarseElement,
+                                                  patch.iElementWorldCoarse,
+                                                  extractElements=False)]];
+
+        correctorRhs = lod.computeElementCorrector(patch, IPatch, amicroPatch, None, MRhsList)[0]
+        Rmsi, cetaTPrime = lod.computeRhsCoarseQuantities(patch, correctorRhs, amacroPatch, True)
+
+        return patch, correctorRhs, Rmsi, cetaTPrime
+
     def computeIndicators(TInd):
         aPatch = lambda: coef.localizeCoefficient(patchT[TInd], amicro)
         rPatch = lambda: coef.localizeCoefficient(patchT[TInd], amacro)
 
         E_vh = lod.computeErrorIndicatorCoarseFromCoefficients(patchT[TInd], csiT[TInd].muTPrime, aPatch, rPatch)
+        E_vh *= norm_of_rhs[0]
 
-        return E_vh
+        # this is new for E_ft
+        f_patch = rhs[util.extractElementFine(world.NWorldCoarse,
+                                                    world.NCoarseElement,
+                                                    patchT[TInd].iElementWorldCoarse,
+                                                    extractElements=False)]
+        _, E_Rf = lod.computeEftErrorIndicatorsCoarse(patchT[TInd], cetaTPrimeT[TInd], aPatch, rPatch, f_patch,
+                                                        f_patch)
+
+        return E_vh, E_Rf
 
     def UpdateCorrectors(TInd):
         # print(" UPDATING {}".format(TInd))
@@ -85,62 +111,70 @@ def nonlinear_adaptive(NFine,NCoarse,k,Anonlin,rhs,u0,Amicro0,Alin,tolmacro,tolm
         IPatch = lambda: interp.L2ProjectionPatchMatrix(patch, boundaryConditions)
         rPatch = lambda: coef.localizeCoefficient(patch, amacro)
 
-        #MRhsList = [rhs[util.extractElementFine(world.NWorldCoarse,
-        #                                          world.NCoarseElement,
-        #                                          patch.iElementWorldCoarse,
-        #                                          extractElements=False)]];
+        MRhsList = [rhs[util.extractElementFine(world.NWorldCoarse,
+                                                  world.NCoarseElement,
+                                                  patch.iElementWorldCoarse,
+                                                  extractElements=False)]];
 
         correctorsList = lod.computeBasisCorrectors(patch, IPatch, rPatch)
         csi = lod.computeBasisCoarseQuantities(patch, correctorsList, rPatch)
 
-        #correctorRhs = lod.computeElementCorrector(patch, IPatch, rPatch, None, MRhsList)[0]
-        #Rmsij = lod.computeRhsCoarseQuantities(patch, correctorRhs, rPatch)
+        correctorRhs = lod.computeElementCorrector(patch, IPatch, rPatch, None, MRhsList)[0]
+        Rmsij = lod.computeRhsCoarseQuantities(patch, correctorRhs, rPatch)
 
-        return patch, correctorsList, csi.Kmsij
+        return patch, correctorsList, csi.Kmsij, correctorRhs, Rmsij
 
-    def UpdateElements(tol, E_vh, Kmsij_old, correctors_old, amicro_old):
+    def UpdateElements(tol, E, Kmsij_old, correctors_old, Rmsij_old, correctorsRhs_old, amicro_old):
         print('apply tolerance')
         Elements_to_be_updated = []
-        for (i,eps) in E_vh.items():
-            if eps > tol:
+        for (i,eps) in E.items():
+            if eps[0] > tol or eps[1] > tol:
                 Elements_to_be_updated.append(i)
-        if len(E_vh) > 0:
-            print('... to be updated: {}%'.format(100*np.size(Elements_to_be_updated)/len(E_vh)), end='\n', flush=True)
+        if len(E) > 0:
+            print('... to be updated: {}%'.format(100*np.size(Elements_to_be_updated)/len(E)), end='\n', flush=True)
 
 
         print('update Kmsij')
         KmsijT_list = list(np.copy(Kmsij_old))
+        RmsijT_list = list(np.copy(Rmsij_old))
         for T in np.setdiff1d(range(world.NtCoarse), Elements_to_be_updated):
             patch = Patch(world, k, T)
             rPatch = lambda: coef.localizeCoefficient(patch, amacro)
             csi = lod.computeBasisCoarseQuantities(patch, correctors_old[T], rPatch)
             KmsijT_list[T] = csi.Kmsij
+            RmsijT_list[T] = lod.computeRhsCoarseQuantities(patch, correctorsRhs_old[T], rPatch)
 
         if np.size(Elements_to_be_updated) != 0:
             print('... update correctors')
-            patchT_irrelevant, correctorsListTNew, KmsijTNew = zip(*map(UpdateCorrectors,
+            patchT_irrelevant, correctorsListTNew, KmsijTNew, correctorsRhsTNew, RmsijTNew = zip(*map(UpdateCorrectors,
                                                                                  Elements_to_be_updated))
 
             print('update correctorsListT')
             correctorsListT_list = list(np.copy(correctors_old))
+            correctorsRhs_list = list(np.copy(correctorsRhs_old))
             amicro_new = np.copy(amicro_old)
             i = 0
             for T in Elements_to_be_updated:
                 KmsijT_list[T] = KmsijTNew[i]
                 correctorsListT_list[T] = correctorsListTNew[i]
+                RmsijT_list[T] = RmsijTNew[i]
+                correctorsRhs_list[T] = correctorsRhsTNew[i]
                 amicro_new[T] = amacro[T]
                 i += 1
 
             KmsijT = tuple(KmsijT_list)
             correctorsListT = tuple(correctorsListT_list)
-            return KmsijT,correctorsListT, amicro_new
+            RmsijT = tuple(RmsijT_list)
+            correctorsRhsT = tuple(correctorsRhs_list)
+            return KmsijT,correctorsListT,RmsijT,correctorsRhsT,amicro_new
         else:
             KmsijT = tuple(KmsijT_list)
-            return KmsijT,correctors_old, amicro_old
+            RmsijT = tuple(RmsijT_list)
+            return KmsijT,correctors_old,RmsijT,correctorsRhs_old,amicro_old
 
 
     def assembleNonlinear(Alin, u): #uses fine mesh atm
-        aFine = Alin(tcoords, computeGradtCoord(world, u))
+        aFine = Alin(tcoords, func.evaluateCQ1D(world.NWorldFine, u, tcoords))
         assert(aFine.ndim == 1 or aFine.ndim == 3)
         if aFine.ndim == 1:
             Aloc = world.ALocFine
@@ -151,11 +185,12 @@ def nonlinear_adaptive(NFine,NCoarse,k,Anonlin,rhs,u0,Amicro0,Alin,tolmacro,tolm
 
     #precomputation
     basis = fem.assembleProlongationMatrix(world.NWorldCoarse, world.NCoarseElement)
-    amacro = Alin(tcoords, computeGradtCoord(world, basis*u0))
+    amacro = Alin(tcoords, func.evaluateCQ1D(world.NWorldFine, basis*u0, tcoords))
     amicro = np.copy(Amicro0)
     # Use mapper to distribute computations (mapper could be the 'map' built-in or e.g. an ipyparallel map)
     print('computing correctors', end='', flush=True)
     patchT, correctorsListT, KmsijT, csiT = zip(*map(computeKmsij, range(world.NtCoarse)))
+    patchT, correctorsRhsList, RmsijT,cetaTPrimeT = zip(*map(computeRmsi,range(world.NtCoarse)))
     print()
 
     uFull = np.copy(u0)
@@ -173,36 +208,34 @@ def nonlinear_adaptive(NFine,NCoarse,k,Anonlin,rhs,u0,Amicro0,Alin,tolmacro,tolm
 
     while resmacro > tolmacro and it < maxit:
         print('computing error indicators', end='', flush=True)
-        E_vh = list(map(computeIndicators, range(world.NtCoarse)))
+        E_vh, E_Rf = zip(*map(computeIndicators, range(world.NtCoarse)))
         print()
-        print('maximal value error estimator {}'.format(np.max(E_vh)))
-        E_vh = {i: E_vh[i] for i in range(np.size(E_vh)) if E_vh[i] > 0}
+        print('maximal value error estimator for basis correctors {}'.format(np.max(E_vh)))
+        print('maximal value error estimator for right-hand side correctors {}'.format(np.max(E_Rf)))
+        E = {i: [E_vh[i], E_Rf[i]] for i in range(np.size(E_vh)) if E_vh[i]>0 or E_Rf[i]>0}
 
         #loop over elements with possible recomputation of correctors
-        KmsijT,correctorsListT,amicro = UpdateElements(tolmicro*resmacro,E_vh,KmsijT,correctorsListT,amicro)
+        KmsijT,correctorsListT,RmsijT,correctorsRhsT,amicro = UpdateElements(tolmicro*resmacro,E,KmsijT,correctorsListT,RmsijT,correctorsRhsList,amicro)
 
         #LOD solve
         KFull = pglod.assembleMsStiffnessMatrix(world, patchT, KmsijT)
-        bFull = basis.T * MFull * rhs
+        RFull = pglod.assemblePatchFunction(world, patchT, RmsijT)
+        Rf = pglod.assemblePatchFunction(world, patchT, correctorsRhsT)
+        bFull = basis.T * MFull * rhs - RFull
         basisCorrectors = pglod.assembleBasisCorrectors(world, patchT, correctorsListT)
         modifiedBasis = basis - basisCorrectors
         uFull, _ = pglod.solve(world, KFull, bFull, boundaryConditions)
         uLodFine = modifiedBasis * uFull
+        uLodFine += Rf
 
-        errorA = Alin(tcoords, computeGradtCoord(world,uLodFine))-amacro
+        errorA = Alin(tcoords, func.evaluateCQ1D(world.NWorldFine,uLodFine, tcoords))-amacro
         assert(amacro.ndim == 1 or amacro.ndim == 3)
         if amacro.ndim == 1:
             errorAmat = fem.assemblePatchMatrix(NFine, world.ALocFine, errorA**2) #correct?!
         else:
             errorAmat = fem.assemblePatchMatrix(NFine, world.ALocMatrixFine, np.einsum('Tij, Tjk->Tik', errorA, errorA))
         resmacro = np.sqrt(np.dot(uLodFine, errorAmat*uLodFine))
-        #if amacro.ndim == 1:
-        #    amacro_uFull = np.array([amacro, amacro]).T * computeGradtCoord(world, uLodFine)
-        #else:
-        #    amacro_uFull = np.einsum('Tij,Tj-> Ti', amacro, computeGradtCoord(world,basis * uFull)) #passt das?
-        #if np.linalg.norm(np.linalg.norm(Anonlin(tcoords,computeGradtCoord(world,basis*uFull)).T\
-        #                                 -amacro_uFull, axis=-1), np.inf) > tollin:
-        amacro = Alin(tcoords, computeGradtCoord(world, uLodFine)) #basis*uFull
+        amacro = Alin(tcoords, func.evaluateCQ1D(world.NWorldFine, uLodFine, tcoords)) #basis*uFull
 
         #update res and it
         fixed = util.boundarypIndexMap(world.NWorldCoarse, boundaryConditions == 0)
@@ -211,7 +244,8 @@ def nonlinear_adaptive(NFine,NCoarse,k,Anonlin,rhs,u0,Amicro0,Alin,tolmacro,tolm
         #resmacro = np.linalg.norm((basis.T*Knonlin*modifiedBasis)[free][:,free]*uFull[free] - (basis.T*MFull*rhs)[free])
         it +=1
 
-        print('residual in {}th iteration is {}'.format(it, np.linalg.norm((basis.T*Knonlin*modifiedBasis)[free][:,free]*uFull[free] - (basis.T*MFull*rhs)[free])), end='\n', flush=True)
+        #what is correct residual with right-hand side correctors?
+        print('residual in {}th iteration is {}'.format(it, np.linalg.norm((basis.T*Knonlin*modifiedBasis)[free][:,free]*uFull[free] - (basis.T*MFull*rhs-RFull)[free])), end='\n', flush=True)
         print('linearization error is {}'.format(resmacro))
 
     return uFull,uLodFine, amacro
@@ -267,7 +301,7 @@ def test_nonlinear_adaptive():
         u0ref = np.zeros(NpFine)
         uFullref = np.copy(u0ref)
 
-        aFine = Alin(tcoords, computeGradtCoord(world, uFullref))
+        aFine = Alin(tcoords, func.evaluateCQ1D(world.NWorldFine, uFullref,tcoords))
         assert (aFine.ndim == 1 or aFine.ndim == 3)
         if aFine.ndim == 1:
             Aloc = world.ALocFine
@@ -290,7 +324,7 @@ def test_nonlinear_adaptive():
             uFullref[free] = uFree
 
             # update res and it
-            aFine = Alin(tcoords, computeGradtCoord(world, uFullref))
+            aFine = Alin(tcoords, func.evaluateCQ1D(world.NWorldFine, uFullref, tcoords))
             AFull = fem.assemblePatchMatrix(NFine, Aloc, aFine)
             resref = np.linalg.norm(AFull[free][:,free] * uFullref[free] - (MFull* f(pcoords))[free])
             itref += 1
@@ -307,7 +341,7 @@ def test_nonlinear_adaptive():
         Amicro0 = Alin(tcoords, np.zeros_like(tcoords))
         tolmacro = 1e-4 #overwrites tolmacro!
         tollin = 1e-6
-        tolmicro = 100 #used as factor atm
+        tolmicro = np.inf #used as factor atm
         uLOD, uLODfine,amacro = nonlinear_adaptive(NFine,NCoarse,k,Anonlin,f,uLOD,Amicro0,Alin,tolmacro,tolmicro, tollin, maxiter)
         uLODfinegrid = uLODfine.reshape(NFine+1, order='C')
 
