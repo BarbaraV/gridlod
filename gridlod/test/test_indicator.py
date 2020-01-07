@@ -28,6 +28,8 @@ def test_indicator():
 
     errors = np.zeros(np.size(NList))
     indicators = np.zeros(np.size(NList))
+    indicators_R = np.zeros(np.size(NList))
+    indicators_Q = np.zeros(np.size(NList))
     i = 0
 
     for N in NList:
@@ -49,6 +51,39 @@ def test_indicator():
             correctorsList = lod.computeBasisCorrectors(patch, IPatch, aPatch)
             csi = lod.computeBasisCoarseQuantities(patch, correctorsList, aPatch)
             return patch, correctorsList, csi.Kmsij, csi
+
+        def computeLMsij(TInd):
+            patch = Patch(world, k, TInd)
+            IPatch = lambda: interp.L2ProjectionPatchMatrix(patch, boundaryConditions)
+            aPatch = lambda: coef.localizeCoefficient(patch, aFine)
+
+            correctorsList = lod.computeBasisCorrectors(patch, IPatch, aPatch)
+
+            lambdasList = list(patch.world.localBasis.T)
+
+            NPatchCoarse = patch.NPatchCoarse
+            NTPrime = np.prod(NPatchCoarse)
+            numLambdas = len(lambdasList)
+
+            TIndtemp = util.convertpCoordIndexToLinearIndex(patch.NPatchCoarse - 1, patch.iElementPatchCoarse)
+
+            LTPrimeij = np.zeros((NTPrime, numLambdas, numLambdas))
+            Kij = np.zeros((numLambdas, numLambdas))
+
+            def accumulate(TPrimeInd, TPrimei, P, Q, KTPrime, BTPrimeij, CTPrimeij):
+                if TPrimeInd == TIndtemp:
+                    Kij[:] = np.dot(P.T, KTPrime * P)
+                    LTPrimeij[TPrimeInd] = CTPrimeij \
+                                           - BTPrimeij \
+                                           - BTPrimeij.T \
+                                           + Kij
+
+                else:
+                    LTPrimeij[TPrimeInd] = CTPrimeij
+
+            lod.performTPrimeLoop(patch, lambdasList, correctorsList, aPatch, accumulate)
+
+            return patch, correctorsList, LTPrimeij
 
         def computeRmsi(TInd):
             patch = Patch(world, k, TInd)
@@ -100,21 +135,40 @@ def test_indicator():
 
         def computeIndicators(TInd):
             aPatch = lambda: coef.localizeCoefficient(patchT[TInd], aFine)
+            TIndinPatch = util.convertpCoordIndexToLinearIndex(patchT[TInd].NPatchCoarse - 1, patchT[TInd].iElementPatchCoarse)
+            aT = aPatch()[TIndinPatch]
 
-            E_vh = np.sqrt(np.sum(csiT[TInd].muTPrime))
-            E_vh *= norm_of_f[0]
+            if aT.ndim == 2:
+                amaxT = np.sqrt(np.linalg.norm(aT))
+            else:
+                amaxT = np.sqrt(1./np.abs(aT))
 
-            E_Rf = np.sqrt(np.sum(cetaTPrimeT[TInd]))
+            E_vh = np.sum(csiT[TInd].muTPrime)
+            #uTprime = xFull[patchT[TInd]]  #passt nocht nicht
+            #_,_,LTPrimeij = computeLMsij(TInd)
+            #E_vh = np.sum(np.dot(uTprime, LTPrimeij*uTprime))
+
+            f_patch = f[util.extractElementFine(world.NWorldCoarse,
+                                                        world.NCoarseElement,
+                                                        patchT[TInd].iElementWorldCoarse,
+                                                        extractElements=False)]
+            MElement = fem.assemblePatchMatrix(patchT[TInd].world.NCoarseElement, patchT[TInd].world.MLocFine)
+            gammaT = np.dot(f_patch, MElement * f_patch)
+
+            E_Rf = np.sum(cetaTPrimeT[TInd])+1./np.max(NWorldCoarse)**2*gammaT*amaxT**2 #weighting in A missing
 
             return E_vh, E_Rf
 
         E_vh, E_Rf = zip(*map(computeIndicators, range(world.NtCoarse)))
-        indicators[i] = 2*np.linalg.norm(E_vh) + np.sum(E_Rf)
+        indicators_Q[i] = 2*np.sqrt(np.max(E_vh))*norm_of_f[0]
+        indicators_R[i] = 2*np.sqrt(np.max(E_Rf))
+        indicators[i] = indicators_Q[i] + indicators_R[i] #not efficient?!
         #indicators[i] = np.max(E_vh) + np.max(E_Rf)
 
         print(errors[i])
         print(np.max(E_vh))
         print(np.max(E_Rf))
+        print(indicators[i])
         print('-------------------------------')
 
         i+=1
@@ -122,10 +176,15 @@ def test_indicator():
     plt.figure()
     plt.plot(NList, errors, 'r', label= 'errors')
     plt.plot(NList, indicators, 'b', label = 'indicators')
+    plt.plot(NList, indicators_Q, 'g', label= 'indicators Q')
+    plt.plot(NList, indicators_R, 'k', label = 'indicators R')
     plt.legend()
 
     plt.figure()
-    plt.plot(NList, indicators/errors)
+    #plt.plot(NList, indicators/errors, 'b*', label='effectivity')
+    plt.plot(NList, indicators_R/errors, 'r*', label='effectivity R')
+    #plt.plot(NList, indicators_Q/errors, 'g*', label='effectivity Q')
+    plt.legend()
     plt.show()
 
 
