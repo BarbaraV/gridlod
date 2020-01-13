@@ -393,6 +393,175 @@ def computeErrorIndicatorCoarseFromCoefficients(patch, muTPrime, aPatchOld, aPat
 
     return computeErrorIndicatorCoarseFromGreeks(patch, muTPrime, (deltaMaxTPrime, kappaMaxT))
 
+def computeErrorIndicatorGreeksFromCoefficients(patch, aPatchOld, aPatchNew):
+    ''' Compute the coarse error idicator E(T) with explicit value of AOld and ANew.
+
+    This requires muTPrime from CSI and the new and old coefficient.
+    '''
+
+    while callable(aPatchOld):
+        aPatchOld = aPatchOld()
+
+    while callable(aPatchNew):
+        aPatchNew = aPatchNew()
+
+    aOld = aPatchOld
+    aNew = aPatchNew
+
+    world = patch.world
+    NPatchCoarse = patch.NPatchCoarse
+    NCoarseElement = world.NCoarseElement
+    NPatchFine = NPatchCoarse*NCoarseElement
+    iElementPatchCoarse = patch.iElementPatchCoarse
+
+    ### In case aNew and aOld dimensions do not match ###
+    if aNew.ndim == 3 and aOld.ndim ==1:
+        aEye = np.tile(np.eye(2), [np.prod(NPatchFine), 1, 1])
+        aOld = np.einsum('tji, t-> tji', aEye, aOld)
+    if aNew.ndim == 1 and aOld.ndim ==3:
+        aEye = np.tile(np.eye(2), [np.prod(NPatchFine), 1, 1])
+        aNew = np.einsum('tji, t -> tji', aEye, aNew)
+
+
+    elementCoarseIndex = util.convertpCoordIndexToLinearIndex(NPatchCoarse-1, iElementPatchCoarse)
+
+    TPrimeFinetStartIndices = util.pIndexMap(NPatchCoarse-1, NPatchFine-1, NCoarseElement)
+    TPrimeFinetIndexMap = util.lowerLeftpIndexMap(NCoarseElement-1, NPatchFine-1)
+
+    TPrimeIndices = np.add.outer(TPrimeFinetStartIndices, TPrimeFinetIndexMap)
+    aTPrime = aNew[TPrimeIndices]
+    aOldTPrime = aOld[TPrimeIndices]
+
+    if aNew.ndim == 3:
+        aInvTPrime = np.linalg.inv(aTPrime)
+        aOldInvTPrime = np.linalg.inv(aOldTPrime)
+        aDiffTPrime = aTPrime - aOldTPrime
+        deltaMaxTPrime = np.sqrt(np.max(np.linalg.norm(np.einsum('Ttij, Ttjk, Ttkl, Ttlm -> Ttim',
+                                                                 aInvTPrime, aDiffTPrime, aDiffTPrime, aOldInvTPrime),
+                                                       axis=(2,3), ord=2),
+                                        axis=1))
+        kappaMaxT = np.sqrt(np.max(np.linalg.norm(np.einsum('tij, tjk -> tik',
+                                                            aOldTPrime[elementCoarseIndex], aInvTPrime[elementCoarseIndex]),
+                                                  axis=(1,2), ord=2)))
+    else:
+        deltaMaxTPrime = np.max(np.abs((aTPrime - aOldTPrime)/np.sqrt(aTPrime*aOldTPrime)), axis=1)
+        kappaMaxT = np.sqrt(np.max(np.abs(aOldTPrime[elementCoarseIndex] / aTPrime[elementCoarseIndex])))
+
+    return deltaMaxTPrime, kappaMaxT
+
+def computeErrorIndicatorCoarseMultiple(patch, muTPrimeList, aPatchRefList, aPatchNew, alpha=None):
+    ''' Compute the coarse error idicator E(T) with explicit value of AOld and ANew.
+
+    This requires muTPrime from CSI and the new and old coefficient.
+    '''
+
+    '''for i in range(len(aPatchRefList)):
+        while callable(aPatchRefList[i]):
+            aPatchRefList[i] = aPatchRefList[i]()'''
+
+    for i in range(len(muTPrimeList)):
+        while callable(muTPrimeList[i]):
+           muTPrimeList[i] = muTPrimeList[i]()
+
+    while callable(aPatchNew):
+        aPatchNew = aPatchNew()
+
+    assert(len(muTPrimeList) == len(aPatchRefList))
+
+    aNew = aPatchNew
+
+    world = patch.world
+    NPatchCoarse = patch.NPatchCoarse
+    NCoarseElement = world.NCoarseElement
+    NPatchFine = NPatchCoarse*NCoarseElement
+
+    TPrimeFinetStartIndices = util.pIndexMap(NPatchCoarse-1, NPatchFine-1, NCoarseElement)
+    TPrimeFinetIndexMap = util.lowerLeftpIndexMap(NCoarseElement-1, NPatchFine-1)
+
+    TPrimeIndices = np.add.outer(TPrimeFinetStartIndices, TPrimeFinetIndexMap)
+
+    EQTList = np.zeros(len(muTPrimeList))
+    if alpha is not None:
+        mu = alpha/np.linalg.norm(alpha)**2
+
+        for i in range(len(aPatchRefList)):
+            aOld = aPatchRefList[i]
+            ### In case aNew and aOld dimensions do not match ###
+            if aNew.ndim == 3 and aOld.ndim ==1:
+                aEye = np.tile(np.eye(2), [np.prod(NPatchFine), 1, 1])
+                aOld = np.einsum('tji, t-> tji', aEye, aOld)
+            if aNew.ndim == 1 and aOld.ndim ==3:
+                aEye = np.tile(np.eye(2), [np.prod(NPatchFine), 1, 1])
+                aNew = np.einsum('tji, t -> tji', aEye, aNew)
+
+            aTPrime = aNew[TPrimeIndices]
+            aOldTPrime = aOld[TPrimeIndices]
+
+            deltaMaxTPrime1, kappaMaxT = computeErrorIndicatorGreeksFromCoefficients(patch, aOld, aNew)
+
+            if aNew.ndim == 3:
+                aInvTPrime = np.linalg.inv(aTPrime)
+                aOldInvTPrime = np.linalg.inv(aOldTPrime)
+                aMuDiffTPrime = mu[i]*aTPrime - aOldTPrime
+                deltaMaxTPrime2 = np.sqrt(np.max(np.linalg.norm(np.einsum('Ttij, Ttjk, Ttkl, Ttlm -> Ttim',
+                                                                          aInvTPrime, aMuDiffTPrime, aMuDiffTPrime,
+                                                                          aOldInvTPrime),
+                                                                axis=(2, 3), ord=2),
+                                                 axis=1))
+                deltaMaxTPrime = np.max([deltaMaxTPrime1, deltaMaxTPrime2], axis=0)
+            else:
+                deltaMaxTPrime2 = np.max(np.abs((mu[i]*aTPrime - aOldTPrime) / np.sqrt(aTPrime * aOldTPrime)), axis=1)
+                deltaMaxTPrime = np.max([deltaMaxTPrime1, deltaMaxTPrime2], axis=0)
+            EQTList[i] = computeErrorIndicatorCoarseFromGreeks(patch, muTPrimeList[i], (deltaMaxTPrime, kappaMaxT))
+        EQT = np.sqrt(len(muTPrimeList)*np.dot(alpha**2, EQTList**2))
+
+    else: #alpha is None, heuristic choice of alpha
+        deltaMaxTPrime1List = []
+        kappaMaxTList = []
+        for i in range(len(aPatchRefList)):
+            aOld = aPatchRefList[i]
+            ### In case aNew and aOld dimensions do not match ###
+            if aNew.ndim == 3 and aOld.ndim ==1:
+                aEye = np.tile(np.eye(2), [np.prod(NPatchFine), 1, 1])
+                aOld = np.einsum('tji, t-> tji', aEye, aOld)
+            if aNew.ndim == 1 and aOld.ndim ==3:
+                aEye = np.tile(np.eye(2), [np.prod(NPatchFine), 1, 1])
+                aNew = np.einsum('tji, t -> tji', aEye, aNew)
+            deltaMaxTPrime1, kappaMaxT = computeErrorIndicatorGreeksFromCoefficients(patch, aOld, aNew)
+            deltaMaxTPrime1List.append(deltaMaxTPrime1)
+            kappaMaxTList.append(kappaMaxT)
+            EQTList[i] = computeErrorIndicatorCoarseFromGreeks(patch, muTPrimeList[i],
+                                                               (deltaMaxTPrime1, kappaMaxT))
+        #heuristic choice of alpha
+        alpha = np.zeros(len(aPatchRefList))
+        alpha[np.where((EQTList - np.min(EQTList)) < 1e-12)[0]] = 1.
+        alpha = alpha/np.sum(alpha)
+        mu = alpha / np.linalg.norm(alpha) ** 2
+
+        for i in range(len(aPatchRefList)):
+            aOld = aPatchRefList[i]
+
+            aTPrime = aNew[TPrimeIndices]
+            aOldTPrime = aOld[TPrimeIndices]
+
+            if aNew.ndim == 3:
+                aInvTPrime = np.linalg.inv(aTPrime)
+                aOldInvTPrime = np.linalg.inv(aOldTPrime)
+                aMuDiffTPrime = mu[i]*aTPrime - aOldTPrime
+                deltaMaxTPrime2 = np.sqrt(np.max(np.linalg.norm(np.einsum('Ttij, Ttjk, Ttkl, Ttlm -> Ttim',
+                                                                          aInvTPrime, aMuDiffTPrime, aMuDiffTPrime,
+                                                                          aOldInvTPrime),
+                                                                axis=(2, 3), ord=2),
+                                                 axis=1))
+                deltaMaxTPrime = np.max([deltaMaxTPrime1List[i], deltaMaxTPrime2], axis=0)
+            else:
+                deltaMaxTPrime2 = np.max(np.abs((mu[i]*aTPrime - aOldTPrime) / np.sqrt(aTPrime * aOldTPrime)), axis=1)
+                deltaMaxTPrime = np.max([deltaMaxTPrime1List[i], deltaMaxTPrime2], axis=0)
+            EQTList[i] = computeErrorIndicatorCoarseFromGreeks(patch, muTPrimeList[i], (deltaMaxTPrime, kappaMaxTList[i]))
+        EQT = np.sqrt(len(muTPrimeList)*np.dot(alpha**2, EQTList**2))
+
+    return EQT, alpha
+
 def computeEftErrorIndicatorsCoarse(patch, cetaTPrime, aPatchOld, aPatchNew, fElementOld, fElementNew):
     while callable(aPatchOld):
         aPatchOld = aPatchOld()
