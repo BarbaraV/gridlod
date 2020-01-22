@@ -128,7 +128,7 @@ def UpdateElements(tol, E, Kmsij_old, correctors_old, Rmsij_old, correctorsRhs_o
 #==================================================================================================================
 #Test1
 #====================================================================================================================
-aRef1 = np.ones(fine)
+'''aRef1 = np.ones(fine)
 aRef1 /= 10
 aRef2 = np.copy(aRef1)
 
@@ -317,12 +317,12 @@ for i in range(len(NList)):
     plt.bar(x[i], error_indicator_pert2[i], width=0.03, color='b', label='perturbed2')
     plt.legend()
 
-plt.show()
+plt.show()'''
 
 #====================================================================================================================
 #Test 2
 
-'''aRef1 = np.ones(fine)
+aRef1 = np.ones(fine)
 aRef1 /= 10
 aRef2 = np.copy(aRef1)
 
@@ -507,4 +507,4 @@ plt.plot(util.pCoordinates(world.NWorldFine), uLodCoarse1, color='r', label='tru
 plt.plot(util.pCoordinates(world.NWorldFine), uLodCoarse_pert1, color='b', label='with reference')
 plt.legend()
 
-plt.show()'''
+plt.show()
