@@ -6,10 +6,10 @@ from gridlod import pglod, util, lod, interp, coef, fem
 from gridlod.world import World, Patch
 
 def test_indicator():
-    NFine = np.array([3200])
+    NFine = np.array([6400])
     NpFine = np.prod(NFine+1)
-    NList = [10, 20, 40, 80, 160]
-    epsilon = 1./320
+    NList = [10, 20, 40, 80, 160, 320]
+    epsilon = 1./640
     k = 2
 
     pi = np.pi
@@ -136,12 +136,15 @@ def test_indicator():
         def computeIndicators(TInd):
             aPatch = lambda: coef.localizeCoefficient(patchT[TInd], aFine)
             TIndinPatch = util.convertpCoordIndexToLinearIndex(patchT[TInd].NPatchCoarse - 1, patchT[TInd].iElementPatchCoarse)
-            aT = aPatch()[TIndinPatch]
+            aT = aFine[util.extractElementFine(world.NWorldCoarse,
+                                                        world.NCoarseElement,
+                                                        patchT[TInd].iElementWorldCoarse,
+                                                        extractElements=True)]
 
             if aT.ndim == 2:
-                amaxT = np.sqrt(np.linalg.norm(aT))
+                amaxT = np.sqrt(np.linalg.norm(aT)) #passt nicht?!
             else:
-                amaxT = np.sqrt(1./np.abs(aT))
+                amaxT = np.sqrt(1./np.max(np.abs(aT)))
 
             E_vh = np.sum(csiT[TInd].muTPrime)
             #uTprime = xFull[patchT[TInd]]  #passt nocht nicht
@@ -161,13 +164,13 @@ def test_indicator():
 
         E_vh, E_Rf = zip(*map(computeIndicators, range(world.NtCoarse)))
         indicators_Q[i] = 2*np.sqrt(np.max(E_vh))*norm_of_f[0]
-        indicators_R[i] = 2*np.sqrt(np.max(E_Rf))
+        indicators_R[i] = 2*np.sqrt(np.sum(E_Rf))
         indicators[i] = indicators_Q[i] + indicators_R[i] #not efficient?!
         #indicators[i] = np.max(E_vh) + np.max(E_Rf)
 
         print(errors[i])
-        print(np.max(E_vh))
-        print(np.max(E_Rf))
+        print(indicators_Q[i]) #np.max(E_vh)
+        print(indicators_R[i]) #np.max(E_Rf)
         print(indicators[i])
         print('-------------------------------')
 
@@ -184,6 +187,13 @@ def test_indicator():
     #plt.plot(NList, indicators/errors, 'b*', label='effectivity')
     plt.plot(NList, indicators_R/errors, 'r*', label='effectivity R')
     #plt.plot(NList, indicators_Q/errors, 'g*', label='effectivity Q')
+    plt.legend()
+
+
+    plt.figure()
+    #plt.plot(NList, indicators/errors, 'b*', label='effectivity')
+    #plt.plot(NList, indicators_R/errors, 'r*', label='effectivity R')
+    plt.plot(NList, indicators_Q/errors, 'g*', label='effectivity Q')
     plt.legend()
     plt.show()
 
