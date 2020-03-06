@@ -450,7 +450,7 @@ def computeErrorIndicatorGreeksFromCoefficients(patch, aPatchOld, aPatchNew):
 
     return deltaMaxTPrime, kappaMaxT
 
-def computeErrorIndicatorCoarseMultiple(patch, muTPrimeList, aPatchRefList, aPatchNew, alpha=None):
+def computeErrorIndicatorCoarseMultiple(patch, muTPrimeList, aPatchRefList, aPatchNew, alpha=None, mu=None):
     ''' Compute the coarse error idicator E(T) with explicit value of AOld and ANew.
 
     This requires muTPrime from CSI and the new and old coefficient.
@@ -465,6 +465,7 @@ def computeErrorIndicatorCoarseMultiple(patch, muTPrimeList, aPatchRefList, aPat
         aPatchNew = aPatchNew()
 
     assert(len(muTPrimeList) == len(aPatchRefList))
+    assert((alpha is None and mu is None) or (alpha is not None and mu is not None))
 
     aNew = aPatchNew
 
@@ -486,7 +487,9 @@ def computeErrorIndicatorCoarseMultiple(patch, muTPrimeList, aPatchRefList, aPat
     if alpha is None:
         #optimization-based choice of alpha
         def approxA(beta):
-            assert (len(beta) == len(aPatchRefList))
+            assert (len(beta) == 2*len(aPatchRefList))
+            alpha= beta[:len(beta)//2]
+            mu=beta[len(beta)//2:]
             aNew = aPatchNew
             aTPrime = aNew[TPrimeIndices]
             scaledAT = np.zeros_like(aTPrime)
@@ -501,13 +504,16 @@ def computeErrorIndicatorCoarseMultiple(patch, muTPrimeList, aPatchRefList, aPat
                     aNew = np.einsum('tji, t -> tji', aEye, aNew)
 
                 aOldTPrime = aOld[TPrimeIndices]
-                scaledAT += beta[i]*aOldTPrime
-            return np.sqrt(np.sum(np.max(np.abs(aTPrime-scaledAT), axis=1) ** 2))
+                scaledAT += alpha[i]*(aTPrime-mu[i]*aOldTPrime)
+            return np.sqrt(np.sum(np.max(np.abs(scaledAT), axis=1) ** 2))
 
-        betastart = np.zeros(len(aPatchRefList))
+        betastart = np.zeros(2*len(aPatchRefList))
         betastart[0] = 1.
-        beta = optimize.minimize(approxA, betastart, method='Nelder-Mead') #, bounds=optimize.Bounds(0, np.inf) w/o bounds the error is better (not the estimator!)
-        alpha= beta.x
+        betastart[len(betastart)//2:]=1.
+        constrone = lambda beta: 1-np.sum(beta[:len(beta)//2])#
+        beta = optimize.minimize(approxA, betastart, constraints={'type': 'eq', 'fun':constrone})
+        alpha= beta.x[:len(beta.x)//2]
+        mu=beta.x[len(beta.x)//2:]
 
     scaledDiffATPrime1 = np.zeros_like(aTPrime)
     scaledDiffATPrime2 = np.zeros_like(aTPrime)
@@ -524,13 +530,11 @@ def computeErrorIndicatorCoarseMultiple(patch, muTPrimeList, aPatchRefList, aPat
         aOldTPrime = aOld[TPrimeIndices]
         aTPrime = aNew[TPrimeIndices]
         kappaMaxTList[i] = np.sqrt(np.max(np.abs(aOldTPrime[elementCoarseIndex] / aTPrime[elementCoarseIndex])))
-        mu = np.sum(alpha)
 
         if aNew.ndim == 3:
             NotImplementedError('this case is not yet implemented')
         else:
-            scaledDiffATPrime1 += alpha[i]*(mu*aTPrime-aOldTPrime) / np.sqrt(aTPrime * aOldTPrime)
-            scaledDiffATPrime2 += alpha[i]*(aTPrime-aOldTPrime) / np.sqrt(aTPrime * aOldTPrime)
+            scaledDiffATPrime2 += alpha[i]*(aTPrime-mu[i]*aOldTPrime) / np.sqrt(aTPrime * aOldTPrime)##absolute value?!
     gammaT1 = np.max(np.abs(scaledDiffATPrime1[elementCoarseIndex]))
     gammaTPrime2 = np.max(np.abs(scaledDiffATPrime2), axis=1)
     deltaTTprime = np.zeros(len(TPrimeIndices))
@@ -539,7 +543,7 @@ def computeErrorIndicatorCoarseMultiple(patch, muTPrimeList, aPatchRefList, aPat
     kappamuTTprime = np.einsum('i, ij->ij', kappaMaxTList**2, muTPrimeList)
     EQT = np.sqrt(np.sum(gammaTTprime*np.max(kappamuTTprime,axis=0)))
 
-    return EQT, alpha
+    return EQT, alpha*mu
 
 def computeEftErrorIndicatorsCoarse(patch, cetaTPrime, aPatchOld, aPatchNew, fElementOld, fElementNew):
     while callable(aPatchOld):
