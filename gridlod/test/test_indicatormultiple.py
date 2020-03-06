@@ -45,7 +45,7 @@ def computeIndicator(TInd, aRefList, aPert):
     rPatch = lambda: coef.localizeCoefficient(patchT[TInd], aPert)
     muTPrimeList = [csi[TInd].muTPrime for csi in csiList]
 
-    E_vh, alphaT = lod.computeErrorIndicatorCoarseMultiple(patchT[TInd], muTPrimeList, aPatch, rPatch, alpha)
+    E_vh, alphaT = lod.computeErrorIndicatorCoarseMultiple(patchT[TInd], muTPrimeList, aPatch, rPatch, alpha, mu)
 
     return E_vh, alphaT
 
@@ -126,77 +126,19 @@ def UpdateElements(tol, E, Kmsij_old, correctors_old, Rmsij_old, correctorsRhs_o
 
     return KmsijT, correctorsListT, RmsijT, correctorsRhsT
 
-
-def computeACombiCoarseMultiple(TInd, aRefList, aPert, alphaList):
-    aPatchRefList = [coef.localizeCoefficient(patchT[TInd], aRef) for aRef in aRefList]
-    aPatchNew = lambda: coef.localizeCoefficient(patchT[TInd], aPert)
-    patch = patchT[TInd]
-
-    while callable(aPatchNew):
-        aPatchNew = aPatchNew()
-
-    aNew = aPatchNew
-
-    world = patch.world
-    NPatchCoarse = patch.NPatchCoarse
-    NCoarseElement = world.NCoarseElement
-    NPatchFine = NPatchCoarse*NCoarseElement
-
-    elementCoarseIndex = util.convertpCoordIndexToLinearIndex(NPatchCoarse - 1, patch.iElementPatchCoarse)
-
-    TPrimeFinetStartIndices = util.pIndexMap(NPatchCoarse-1, NPatchFine-1, NCoarseElement)
-    TPrimeFinetIndexMap = util.lowerLeftpIndexMap(NCoarseElement-1, NPatchFine-1)
-
-    TPrimeIndices = np.add.outer(TPrimeFinetStartIndices, TPrimeFinetIndexMap)
-
-    aTPrime = aNew[TPrimeIndices]
-
-    if alphaList is not None:
-
-        scaledAT = np.zeros_like(aTPrime[elementCoarseIndex])
-        scaledDiffAT = np.zeros_like(aTPrime[elementCoarseIndex])
-        scaledDiffATPrime = np.zeros_like(aTPrime)
-        alpha = alphaList[TInd]
-
-        for i in range(len(aPatchRefList)):
-            aOld = aPatchRefList[i]
-            ### In case aNew and aOld dimensions do not match ###
-            if aNew.ndim == 3 and aOld.ndim ==1:
-                aEye = np.tile(np.eye(2), [np.prod(NPatchFine), 1, 1])
-                aOld = np.einsum('tji, t-> tji', aEye, aOld)
-            if aNew.ndim == 1 and aOld.ndim ==3:
-                aEye = np.tile(np.eye(2), [np.prod(NPatchFine), 1, 1])
-                aNew = np.einsum('tji, t -> tji', aEye, aNew)
-
-            aT = aTPrime[elementCoarseIndex]
-            aOldTPrime = aOld[TPrimeIndices]
-            aOldT = aOldTPrime[elementCoarseIndex]
-
-            scaledAT += alpha[i]*aOldT
-            scaledDiffAT += alpha[i]*(aT-aOldT)
-            scaledDiffATPrime += alpha[i]*(aTPrime-aOldTPrime)
-        delta1 = np.max(np.abs(aTPrime[elementCoarseIndex]-scaledAT))
-        delta2 = np.max(np.abs(scaledDiffAT))
-        delta3 = np.sum(np.max(np.abs(scaledDiffATPrime), axis=1))
-
-    return delta1, delta2, delta3
-
 #==================================================================================================================
 #Test1
 #====================================================================================================================
-'''aRef1 = np.ones(fine)
-aRef1 /= 10
+aRef1 = np.ones(fine)
 aRef2 = np.copy(aRef1)
 
-for i in range(int(fine* 2/8.) - 1, int(fine * 3/8.) - 1):
-    aRef2[i] = 1
+for i in range(int(fine* 0/8.) - 1, int(fine * 4/8.) - 1):
+    aRef2[i] = 2
+for i in range(int(fine*4/8.)-1, int(fine*8/8.)):
+    aRef1[i] =2
 
-aPert1 = np.copy(aRef1)
-for i in range(int(fine* 5/8.) - 1, int(fine * 6/8.) - 1):
-    aPert1[i] = 1
-aPert2 = np.copy(aRef1)
-for i in range(int(fine* 2/8.) - 1, int(fine * 4/8.) - 1):
-    aPert2[i] = 1
+aPert1 = np.ones(fine)
+aPert1 *=1.5
 
 
 xpCoarse = util.pCoordinates(NFine).flatten()
@@ -213,7 +155,6 @@ plt.figure('Coefficient_pert')
 plt.plot(xt, aRef1, label='$Aref1$')
 plt.plot(xt, aRef2, label='$Aref2$')
 plt.plot(xt, aPert1, label='$Apert1$')
-plt.plot(xt, aPert2, label='$Apert2$')
 plt.grid(True)
 plt.xticks([0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1], fontsize=16)
 plt.ylabel('$y$', fontsize=16)
@@ -221,10 +162,8 @@ plt.xlabel('$x$', fontsize=16)
 plt.legend(frameon=False, fontsize=16)
 
 error_indicator_pert1 = []
-error_indicator_pert2 = []
 x = []
 error_pert1 = []
-error_pert2 = []
 k=2
 
 for N in NList:
@@ -253,6 +192,21 @@ for N in NList:
     print()
     print()
 
+    MFull = fem.assemblePatchMatrix(world.NWorldFine, world.MLocFine)
+    basis = fem.assembleProlongationMatrix(world.NWorldCoarse, world.NCoarseElement)
+    bFull = basis.T * MFull * f  # - RFull1
+    KFull_ref1 = pglod.assembleMsStiffnessMatrix(world, patchT, KmsijT1)
+    uFull_ref1, _ = pglod.solve(world, KFull_ref1, bFull, boundaryConditions)
+    basisCorrectors_ref1 = pglod.assembleBasisCorrectors(world, patchT, correctorsList1)
+    modifiedBasis_ref1 = basis - basisCorrectors_ref1
+    uLodFine_ref1 = modifiedBasis_ref1 * uFull_ref1
+
+    KFull_ref2 = pglod.assembleMsStiffnessMatrix(world, patchT, KmsijT2)
+    uFull_ref2, _ = pglod.solve(world, KFull_ref2, bFull, boundaryConditions)
+    basisCorrectors_ref2 = pglod.assembleBasisCorrectors(world, patchT, correctorsList2)
+    modifiedBasis_ref2 = basis - basisCorrectors_ref2
+    uLodFine_ref2 = modifiedBasis_ref2 * uFull_ref2
+
     csiList =[csiT1, csiT2]
     aRefList = [aRef1, aRef2]
     KmsijList = [KmsijT1, KmsijT2]
@@ -261,64 +215,39 @@ for N in NList:
     correctorsRhsList = [correctorsRhsList1, correctorsRhsList2]
 
     computeIndicator1 = lambda TInd: computeIndicator(TInd, aRefList, aPert1)
-    computeIndicator2 = lambda TInd: computeIndicator(TInd, aRefList, aPert2)
 
     alpha = None#np.array([0.5, 0.5])
+    mu = None#np.array([1., 1.])
     print('computing error indicators', end='', flush=True)
     E_vh1, alphaList1 = zip(*map(computeIndicator1, range(world.NtCoarse)))
     print()
     print('max error perturbed1  for alpha={}: {}'.format(alphaList1[np.argmax(E_vh1)],max(E_vh1)))
     error_indicator_pert1.append(E_vh1)
-    print('computing error indicators', end='', flush=True)
-    E_vh2, alphaList2 = zip(*map(computeIndicator2, range(world.NtCoarse)))
-    print()
-    print('max error perturbed2 alpha={}: {}'.format(alphaList2[np.argmax(E_vh2)],max(E_vh2)))
-    error_indicator_pert2.append(E_vh2)
     E1 = {i: [E_vh1[i], alphaList1[i]] for i in range(np.size(E_vh1))}
-    E2 = {i: [E_vh2[i], alphaList2[i]] for i in range(np.size(E_vh2))}
 
     print('compute true LOD solution for perturbed coefficient 1')
     computeKmsijP1 = lambda TInd: computeKmsij(TInd, aPert1)
     computeRmsi1 = lambda TInd: computeRmsi(TInd, aPert1)
     print('computing real correctors', end='', flush=True)
-    _, correctorsListT, KmsijT, _ = zip(*map(computeKmsijP1, range(world.NtCoarse)))
+    _, correctorsListTP1, KmsijTP1, _ = zip(*map(computeKmsijP1, range(world.NtCoarse)))
     print()
     print('computing real right hand side correctors', end='', flush=True)
-    _, correctorRhsT, RmsiT = zip(*map(computeRmsi1, range(world.NtCoarse)))
+    _, correctorRhsTP1, RmsiTP1 = zip(*map(computeRmsi1, range(world.NtCoarse)))
     print()
+
     #
-    KFull1 = pglod.assembleMsStiffnessMatrix(world, patchT, KmsijT)
-    RFull1 = pglod.assemblePatchFunction(world, patchT, RmsiT)
+    KFull1 = pglod.assembleMsStiffnessMatrix(world, patchT, KmsijTP1)
+    RFull1 = pglod.assemblePatchFunction(world, patchT, RmsiTP1)
     MFull = fem.assemblePatchMatrix(world.NWorldFine, world.MLocFine)
-    Rf1 = pglod.assemblePatchFunction(world, patchT, correctorRhsT)
+    Rf1 = pglod.assemblePatchFunction(world, patchT, correctorRhsTP1)
     basis1 = fem.assembleProlongationMatrix(world.NWorldCoarse, world.NCoarseElement)
-    bFull1 = basis1.T * MFull * f - RFull1
-    basisCorrectors1 = pglod.assembleBasisCorrectors(world, patchT, correctorsListT)
+    bFull1 = basis1.T * MFull * f #- RFull1
+    basisCorrectors1 = pglod.assembleBasisCorrectors(world, patchT, correctorsListTP1)
     modifiedBasis1 = basis1 - basisCorrectors1
     uFull1, _ = pglod.solve(world, KFull1, bFull1, boundaryConditions)
     uLodFine1 = modifiedBasis1 * uFull1
     uLodFine1 += Rf1
-
-    print('compute true LOD solution for perturbed coefficient 2')
-    computeKmsijP2 = lambda TInd: computeKmsij(TInd, aPert2)
-    computeRmsi2 = lambda TInd: computeRmsi(TInd, aPert2)
-    print('computing real correctors', end='', flush=True)
-    _, correctorsListT, KmsijT, _ = zip(*map(computeKmsijP2, range(world.NtCoarse)))
-    print()
-    print('computing real right hand side correctors', end='', flush=True)
-    _, correctorRhsT, RmsiT = zip(*map(computeRmsi2, range(world.NtCoarse)))
-    print()
-    #
-    KFull2 = pglod.assembleMsStiffnessMatrix(world, patchT, KmsijT)
-    RFull2 = pglod.assemblePatchFunction(world, patchT, RmsiT)
-    Rf2 = pglod.assemblePatchFunction(world, patchT, correctorRhsT)
-    basis2 = fem.assembleProlongationMatrix(world.NWorldCoarse, world.NCoarseElement)
-    bFull2 = basis2.T * MFull * f - RFull2
-    basisCorrectors2 = pglod.assembleBasisCorrectors(world, patchT, correctorsListT)
-    modifiedBasis2 = basis2 - basisCorrectors2
-    uFull2, _ = pglod.solve(world, KFull2, bFull2, boundaryConditions)
-    uLodFine2 = modifiedBasis2 * uFull2
-    uLodFine2 += Rf2
+    uLodCoarse1 = basis1*uFull1
 
     tol= np.inf
     print('compute new LOD for perturbed coefficient 1')
@@ -328,34 +257,21 @@ for N in NList:
     KFull = pglod.assembleMsStiffnessMatrix(world, patchT, KmsijT)
     RFull = pglod.assemblePatchFunction(world, patchT, RmsijT)
     Rf = pglod.assemblePatchFunction(world, patchT, correctorsRhsT)
-    bFull = basis1.T * MFull * f - RFull
+    bFull = basis1.T * MFull * f #- RFull
     basisCorrectors = pglod.assembleBasisCorrectors(world, patchT, correctorsListT)
     modifiedBasis = basis1 - basisCorrectors
     uFull, _ = pglod.solve(world, KFull, bFull, boundaryConditions)
     uLodFine_pert1 = modifiedBasis * uFull
     uLodFine_pert1 += Rf
+    uLodCoarse_pert1 = basis1 * uFull
     AFine_pert1 = fem.assemblePatchMatrix(world.NWorldFine, world.ALocFine, aPert1)
     energy_error = np.sqrt(np.dot((uLodFine_pert1 - uLodFine1), AFine_pert1 * (uLodFine_pert1 - uLodFine1)))
     print("Energy norm  error {}".format(energy_error))
     error_pert1.append(energy_error)
 
-    print('compute new LOD for perturbed coefficient 2')
-    KmsijT, correctorsListT, RmsijT, correctorsRhsT = UpdateElements(tol, E2, KmsijList,
-                                                                     correctorsList, RmsiList, correctorsRhsList, aPert2)
-    # LOD solve
-    KFull = pglod.assembleMsStiffnessMatrix(world, patchT, KmsijT)
-    RFull = pglod.assemblePatchFunction(world, patchT, RmsijT)
-    Rf = pglod.assemblePatchFunction(world, patchT, correctorsRhsT)
-    bFull = basis2.T * MFull * f - RFull
-    basisCorrectors = pglod.assembleBasisCorrectors(world, patchT, correctorsListT)
-    modifiedBasis = basis2 - basisCorrectors
-    uFull, _ = pglod.solve(world, KFull, bFull, boundaryConditions)
-    uLodFine_pert2 = modifiedBasis * uFull
-    uLodFine_pert2 += Rf
-    AFine_pert2 = fem.assemblePatchMatrix(world.NWorldFine, world.ALocFine, aPert2)
-    energy_error = np.sqrt(np.dot((uLodFine_pert2 - uLodFine2), AFine_pert2 * (uLodFine_pert2 - uLodFine2)))
-    print("Energy norm  error {}".format(energy_error))
-    error_pert2.append(energy_error)
+    fixed = util.boundarypIndexMap(NWorldCoarse, boundaryConditions == 0)
+    free = np.setdiff1d(np.arange(NpCoarse), fixed)
+    errormat=np.linalg.inv(KFull[free][:,free].todense())-np.linalg.inv(KFull1[free][:,free].todense())
 
 
 # plot the indicators
@@ -364,33 +280,42 @@ plt.figure('error indicators')
 #plt.rc('text', usetex=True)
 #plt.rc('font', family='serif')
 for i in range(len(NList)):
-    plt.subplot(1,2,i+1)
+    plt.subplot(1,1,i+1)
     plt.bar(x[i], error_indicator_pert1[i], width=0.03, color='r', label='perturbed1')
     #plt.tick_params(axis='both', which='both', bottom=False, top=False, labelbottom=False, right=False, left=False,
     #               labelleft=False)
-    plt.legend(frameon=False, fontsize=16)
-    plt.subplot(1,2,len(NList)+i+1)
-    plt.bar(x[i], error_indicator_pert2[i], width=0.03, color='b', label='perturbed2')
     plt.legend()
 
-plt.show()'''
+plt.figure('full LOD solutions')
+plt.plot(util.pCoordinates(world.NWorldFine), uLodFine1, color='r', label='true')
+plt.plot(util.pCoordinates(world.NWorldFine), uLodFine_pert1, color='b', label='with reference')
+plt.plot(util.pCoordinates(world.NWorldFine), uLodFine_ref1, label='ref1')
+plt.plot(util.pCoordinates(world.NWorldFine), uLodFine_ref2, label='ref2')
+plt.legend()
+
+plt.figure('FE part LOD solutions')
+plt.plot(util.pCoordinates(world.NWorldFine), uLodCoarse1, color='r', label='true')
+plt.plot(util.pCoordinates(world.NWorldFine), uLodCoarse_pert1, color='b', label='with reference')
+plt.legend()
+
+plt.show()
 
 #====================================================================================================================
 #Test 2
-
+'''
 aRef1 = np.ones(fine)
 aRef1 /= 10
 aRef2 = np.copy(aRef1)
 
-for i in range(int(fine* 2/8.) - 1, int(fine * 3/8.) - 1): #2/8, 3/8
+for i in range(int(fine* 2/8.) - 1, int(fine * 25/64.) - 1): #2/8, 3/8
     aRef2[i] = 1
 
 aPert = np.copy(aRef1) #aRef3
-for i in range(int(fine* 5/8.) - 1, int(fine * 6/8.) - 1): #5/8, 6/8
+for i in range(int(fine* 25/64.) - 1, int(fine * 4/8.) - 1): #5/8, 6/8
     aPert[i] = 1
 
 aRef3 = np.copy(aRef2) #aPert
-for i in range(int(fine* 5/8.) - 1, int(fine * 6/8.) - 1): #5/8, 6/8
+for i in range(int(fine* 25/64.) - 1, int(fine * 4/8.) - 1): #5/8, 6/8
     aRef3[i] = 1
 
 
@@ -481,7 +406,8 @@ for N in NList:
 
     computeIndicatorPert = lambda TInd: computeIndicator(TInd, aRefList, aPert)
 
-    alpha = None#np.array([1., 0., 0.])
+    alpha = None #np.array([1., 0, 0.])
+    mu = None #np.array([1., 1., 1.])
     print('computing error indicators', end='', flush=True)
     E_vh, alphaList = zip(*map(computeIndicatorPert, range(world.NtCoarse)))
     print()
@@ -544,11 +470,6 @@ for N in NList:
     L2_error = np.sqrt(np.dot(uLodCoarseP1-uLodCoarse_pert1, MFull*(uLodCoarseP1-uLodCoarse_pert1)))
     print("L2-norm error {}, relative error {}".format(L2_error, L2_error/L2norm))
 
-    #print("something about alphas")
-    #computeACombi = lambda TInd: computeACombiCoarseMultiple(patchT[TInd], aRefList, aPert, alphaList)
-    #delta1, delta2, delta3 = zip(*map(computeACombi, range(world.NtCoarse)))
-    #E2 = {i: [delta1[i], delta2[i], delta3[i]] for i in range(np.size(delta1))}
-    #print(E2)
 
 # plot the indicators
 plt.figure('error indicators')
@@ -576,4 +497,4 @@ plt.plot(util.pCoordinates(world.NWorldFine), uLodCoarseP1, color='r', label='tr
 plt.plot(util.pCoordinates(world.NWorldFine), uLodCoarse_pert1, color='b', label='with reference')
 plt.legend()
 
-plt.show()
+plt.show()'''
