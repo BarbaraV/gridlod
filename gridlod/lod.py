@@ -12,6 +12,7 @@ from . import coef
 from . import transport
 from . import interp
 from . import world
+from . import multiplecoeff
 
 # Saddle point problem solvers
 class NullspaceSolver:
@@ -456,7 +457,11 @@ def computeErrorIndicatorCoarseMultiple(patch, muTPrimeList, aPatchRefList, aPat
     This requires muTPrime from CSI and the new and old coefficient.
     '''
 
-    for i in range(len(muTPrimeList)):
+    if alpha is None:
+        alpha = multiplecoeff.optimizeAlpha(patch, aPatchRefList,aPatchNew)#,muTPrimeList
+        EQT = multiplecoeff.estimatorAlphaTildeA1mod(patch, muTPrimeList,aPatchRefList,aPatchNew,alpha)
+
+    '''for i in range(len(muTPrimeList)):
         while callable(muTPrimeList[i]):
            muTPrimeList[i] = muTPrimeList[i]()
     muTPrimeList = np.array(muTPrimeList)
@@ -508,7 +513,7 @@ def computeErrorIndicatorCoarseMultiple(patch, muTPrimeList, aPatchRefList, aPat
             return np.sqrt(np.sum(np.max(np.abs(scaledAT), axis=1) ** 2))
 
         betastart = np.zeros(2*len(aPatchRefList))
-        betastart[0] = 1.
+        betastart[:len(betastart)//2] = 1./(len(betastart)//2)
         betastart[len(betastart)//2:]=1.
         constrone = lambda beta: 1-np.sum(beta[:len(beta)//2])#
         beta = optimize.minimize(approxA, betastart, constraints={'type': 'eq', 'fun':constrone})
@@ -541,7 +546,7 @@ def computeErrorIndicatorCoarseMultiple(patch, muTPrimeList, aPatchRefList, aPat
     deltaTTprime[np.where((TPrimeIndices - TInd) < 1e-12)[0]] = 1.
     gammaTTprime = np.max([(gammaT1**2)*deltaTTprime, gammaTPrime2**2],axis=0)
     kappamuTTprime = np.einsum('i, ij->ij', kappaMaxTList**2, muTPrimeList)
-    EQT = np.sqrt(np.sum(gammaTTprime*np.max(kappamuTTprime,axis=0)))
+    EQT = np.sqrt(np.sum(gammaTTprime*np.max(kappamuTTprime,axis=0)))'''
 
     return EQT, alpha*mu
 
