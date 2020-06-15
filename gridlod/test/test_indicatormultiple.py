@@ -51,7 +51,7 @@ def computeIndicator(TInd, aRefList, aPert):
 
 def UpdateCorrectors(TInd, aPert):
     # print(" UPDATING {}".format(TInd))
-    patch = Patch(world, k, TInd)
+    patch = patchT[TInd]
     IPatch = lambda: interp.L2ProjectionPatchMatrix(patch, boundaryConditions)
 
     MRhsList = [f[util.extractElementFine(world.NWorldCoarse,
@@ -525,7 +525,6 @@ for N in NList:
     #
     KFullP1 = pglod.assembleMsStiffnessMatrix(world, patchT, KmsijTP1)
     RFullP1 = pglod.assemblePatchFunction(world, patchT, RmsiTP1)
-    MFull = fem.assemblePatchMatrix(world.NWorldFine, world.MLocFine)
     RfP1 = pglod.assemblePatchFunction(world, patchT, correctorRhsTP1)
     basis1 = fem.assembleProlongationMatrix(world.NWorldCoarse, world.NCoarseElement)
     bFullP1 = basis1.T * MFull * f #- RFullP1
