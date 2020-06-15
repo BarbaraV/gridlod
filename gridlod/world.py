@@ -101,3 +101,33 @@ class Patch:
         self.NtFine = np.prod(self.NPatchFine)
         self.NpCoarse = np.prod(self.NPatchCoarse+1)
         self.NtCoarse = np.prod(self.NPatchCoarse)
+
+
+class PatchPeriodic:
+    def __init__(self, world, k, TInd):
+        self.world = world
+        self.k = k
+        self.TInd = TInd
+
+        assert(2*k+1 <= np.min(world.NWorldCoarse))
+
+        iElementWorldCoarse = util.convertpLinearIndexToCoordIndex(world.NWorldCoarse - 1, TInd)[:]
+        self.iElementWorldCoarse = iElementWorldCoarse
+
+        # Compute (NPatchCoarse, iElementPatchCoarse) from (k, iElementWorldCoarse, NWorldCoarse)
+        d = np.size(iElementWorldCoarse)
+        NWorldCoarse = world.NWorldCoarse
+        iPatchWorldCoarse = (iElementWorldCoarse - k).astype('int64')
+        self.iElementPatchCoarse = iElementWorldCoarse - iPatchWorldCoarse
+        for i in range(d):
+            if iPatchWorldCoarse[i] < 0:
+                iPatchWorldCoarse[i] += NWorldCoarse[i]
+        self.NPatchCoarse = (2*k + 1)*np.ones(d, dtype='int64')
+        self.iPatchWorldCoarse = iPatchWorldCoarse
+
+        self.NPatchFine = self.NPatchCoarse * world.NCoarseElement
+
+        self.NpFine = np.prod(self.NPatchFine + 1)
+        self.NtFine = np.prod(self.NPatchFine)
+        self.NpCoarse = np.prod(self.NPatchCoarse + 1)
+        self.NtCoarse = np.prod(self.NPatchCoarse)
