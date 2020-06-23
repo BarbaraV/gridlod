@@ -383,15 +383,15 @@ aRef1 *= 0.1
 bump=1
 aRef2 = np.copy(aRef1)
 
-for i in range(int(fine* 15/64.) - 1, int(fine * 25/64.) - 1): #2/8, 3/8
+for i in range(int(fine* 1/128.) - 1, int(fine * 2/128.) - 1): #2/8, 3/8
     aRef2[i] = bump
 
 aPert = np.copy(aRef1) #aRef3
-for i in range(int(fine* 25/64.) - 1, int(fine * 4/8.) - 1): #3/8, 4/8
+for i in range(int(fine* 3/128.) - 1, int(fine * 4/128.) - 1): #3/8, 4/8
     aPert[i] = bump
 
 aRef3 = np.copy(aRef2) #aPert
-for i in range(int(fine* 25/64.) - 1, int(fine * 4/8.) - 1): #3/8, 4/8
+for i in range(int(fine* 3/128.) - 1, int(fine * 4/128.) - 1): #3/8, 4/8
     aRef3[i] = bump
 
 aRef4 = np.copy(aRef1)
