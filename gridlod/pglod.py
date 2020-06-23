@@ -111,7 +111,7 @@ def assembleMsStiffnessMatrix(world, patchT, KmsijT, periodic=False):
     rows = []
     data = []
     for TInd in range(NtCoarse):
-        if periodic and not isinstance(KmsijT, list):  # if only one matrix is given in periodic case
+        if periodic and not (isinstance(KmsijT, tuple) or isinstance(KmsijT,list)):  # if only one matrix is given in periodic case
             Kmsij = KmsijT
         else:
             Kmsij = KmsijT[TInd]
