@@ -390,7 +390,7 @@ def computeErrorIndicatorCoarseFromCoefficients(patch, muTPrime, aPatchOld, aPat
                                                             aOldTPrime[elementCoarseIndex], aInvTPrime[elementCoarseIndex]),
                                                   axis=(1,2), ord=2)))
     else:
-        deltaMaxTPrime = np.max(np.abs((aTPrime - aOldTPrime)/np.sqrt(aTPrime*aOldTPrime)), axis=1)
+        deltaMaxTPrime = np.max(np.abs((aTPrime - aOldTPrime)/np.sqrt(np.abs(aTPrime*aOldTPrime))), axis=1)
         kappaMaxT = np.sqrt(np.max(np.abs(aOldTPrime[elementCoarseIndex] / aTPrime[elementCoarseIndex])))
 
     return computeErrorIndicatorCoarseFromGreeks(patch, muTPrime, (deltaMaxTPrime, kappaMaxT))

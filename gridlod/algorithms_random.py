@@ -3,7 +3,7 @@ import copy
 
 from gridlod import multiplecoeff, coef, interp, lod, pglod
 from gridlod.world import PatchPeriodic
-from gridlod.build_coefficient import build_checkerboardbasis
+from gridlod.build_coefficient import build_checkerboardbasis2
 
 
 def computeCSI_offline(world, NepsilonEelement, alpha, beta, k, boundaryConditions):
@@ -11,7 +11,7 @@ def computeCSI_offline(world, NepsilonEelement, alpha, beta, k, boundaryConditio
     middle = NCoarse[0] //2
     patch = PatchPeriodic(world, k, middle)
 
-    aRefList = build_checkerboardbasis(patch.NPatchCoarse, NepsilonEelement, world.NCoarseElement, alpha, beta)
+    aRefList = build_checkerboardbasis2(patch.NPatchCoarse, NepsilonEelement, world.NCoarseElement, alpha, beta)
 
     #csiList = []
     KmsijList = []
@@ -46,6 +46,7 @@ def compute_combined_MsStiffness(world,aPert, aRefList, KmsijList,k):
         #muTPrimeList = [csi.muTPrime for csi in csiList]
 
         alphaT = multiplecoeff.optimizeAlpha(patchT[TInd], aRefList, rPatch)
+        #alphaT = alpha*mu
         #by the above function you can switch the choice of alpha optimization
 
         return alphaT
@@ -77,14 +78,14 @@ import matplotlib.pyplot as plt
 
 NFine = np.array([256]) #,64
 NpFine = np.prod(NFine+1)
-Nepsilon = np.array([32]) #,16
-NCoarse = np.array([16]) #,8
+Nepsilon = np.array([16]) #,16
+NCoarse = np.array([8]) #,8
 k=2
-NSamples = 50
+NSamples = 10
 
 boundaryConditions = None #np.array([[0, 0], [0, 0]])
-alpha = 0.1
-beta = 1.
+alpha = 1.
+beta = 10.
 
 NCoarseElement = NFine // NCoarse
 world = World(NCoarse, NCoarseElement, boundaryConditions)
@@ -108,6 +109,7 @@ def computeKmsij(TInd, a, IPatch):
 
 for N in range(NSamples):
     aPert = build_randomcheckerboard(Nepsilon,NFine,alpha,beta)
+    #aPert = beta*np.ones(world.NtFine)
 
     MFull = fem.assemblePatchMatrix(world.NWorldFine, world.MLocFine)
     basis = fem.assembleProlongationMatrix(world.NWorldCoarse, world.NCoarseElement)
@@ -179,6 +181,13 @@ for N in range(NSamples):
     print("L2-error in {}th sample between LOD approaches is: {}".format(N, error))
     #print("L2-error in {}th sample to FEM ref sol is: {}".format(N, error_ref))
     mean_error += error
+
+    '''plt.figure('FE part LOD solutions')
+    plt.plot(util.pCoordinates(world.NWorldFine), uLodCoarsepert, color='r', label='true')
+    plt.plot(util.pCoordinates(world.NWorldFine), uLodCoarse, color='b', label='with reference')
+    plt.legend()
+
+    plt.show()'''
 
 '''    fig = plt.figure()
     ax1 = fig.add_subplot(1, 3, 1)

@@ -48,3 +48,50 @@ def build_checkerboardbasis(NPatch, NepsilonElement, NFineElement, alpha, beta):
         checkerboardbasis.append(coeff)
 
     return checkerboardbasis
+
+
+def build_checkerboardbasis2(NPatch, NepsilonElement, NFineElement, alpha, beta):
+    # builds a list of coeeficients to combine any checkerboard coefficient
+    # input: NPatch is number of coarse elements, NepsilonElement and NFineElement the number of cells (per dimension)
+    # per coarse element for the epsilon and the fine mesh, respectively; alpha and beta are the spectral bounds of the coefficient
+
+    Nepsilon = NPatch * NepsilonElement
+    Ntepsilon = np.prod(Nepsilon)
+    NFine = NPatch*NFineElement
+    NtFine = np.prod(NFine)
+
+    checkerboardbasis = [alpha*np.ones(NtFine)]
+
+    for ii in range(Ntepsilon//2):
+        valuesalpha = alpha * np.ones(Ntepsilon)
+        valuesbeta = beta * np.ones(Ntepsilon)
+        indices1 =(np.repeat(2**(ii+1)*np.arange(max(Ntepsilon//2**(ii+1),1)), ii+1).reshape(max(Ntepsilon//2**(ii+1),1), ii+1)\
+                        +np.arange(ii+1)).flatten()
+        indices2 = np.setdiff1d(np.arange(Ntepsilon), indices1)
+        if len(indices1) != len(indices2):
+            indices1a = indices2[np.arange(len(indices1), len(indices2),2)]
+            indices1 = np.concatenate([indices1, indices1a])
+        valuesalpha[indices1] = beta
+        valuesbeta[indices1] = alpha
+
+        def checkerboard(x, values):
+            index = (x * Nepsilon).astype(int)
+            d = np.shape(index)[1]
+
+            if d == 1:
+                flatindex = index[:]
+            if d == 2:
+                flatindex = index[:, 1] * Nepsilon[0] + index[:, 0]
+            if d == 3:
+                flatindex = index[:, 2] * (Nepsilon[0] * Nepsilon[1]) + index[:, 1] * Nepsilon[0] + index[:, 0]
+            else:
+                NotImplementedError('other dimensions not available')
+
+            return values[flatindex]
+
+        xFine = util.tCoordinates(NFine)
+
+        checkerboardbasis.append(checkerboard(xFine,valuesalpha).flatten())
+        checkerboardbasis.append(checkerboard(xFine, valuesbeta).flatten())
+
+    return checkerboardbasis

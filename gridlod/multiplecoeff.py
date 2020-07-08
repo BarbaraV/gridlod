@@ -44,6 +44,8 @@ def optimizeAlpha(patch, aPatchRefList, aPatchNew):
     constrone = lambda beta: 1-np.sum(beta)
     beta = optimize.minimize(approxA, betastart, constraints={'type': 'eq', 'fun':constrone})
     alpha = beta.x
+    if not beta.success:
+        print('optimization failed')
     return alpha
 
 def optimizeAlpha_indic1(patch, aPatchRefList, aPatchNew,muTPrimeList):
@@ -96,6 +98,8 @@ def optimizeAlpha_indic1(patch, aPatchRefList, aPatchNew,muTPrimeList):
     constrone = lambda beta: 1-np.sum(beta)
     beta = optimize.minimize(approxA, betastart, constraints={'type': 'eq', 'fun':constrone})
     alpha = beta.x
+    if not beta.success:
+        print('Optimization failed')
     return alpha
 
 def optimizeAlpha_indic(patch, aPatchRefList, aPatchNew, muTPrimeList):
@@ -104,7 +108,7 @@ def optimizeAlpha_indic(patch, aPatchRefList, aPatchNew, muTPrimeList):
         aPatchNew = aPatchNew()
 
     def approxA(beta):
-        return estimatorAlpha(patch,muTPrimeList,aPatchRefList,aPatchNew, beta)
+        return estimatorAlphaTildeA1mod(patch,muTPrimeList,aPatchRefList,aPatchNew, beta)
 
     betastart = np.zeros(len(aPatchRefList))
     betastart[:]= 1./(len(betastart))
