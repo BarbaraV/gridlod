@@ -50,7 +50,7 @@ def computeGradtCoord(world, u):
                      + u[(row+1)*(NFine[0]+1)+col]*basisGrad[2,:] + u[(row+1)*(NFine[0]+1)+col+1]*basisGrad[3,:]
     return gradu
 
-def nonlinear_adaptive(NFine,NCoarse,k,Anonlin,rhs,u0,Amicro0,Alin,tolmacro,tolmicro,tollin,maxit):
+def nonlinear_adaptive(NFine,NCoarse,k,Anonlin,rhs,u0,Amicro0,Alin,tolmacro,tolmicro,maxit,uref=None):
     NCoarseElement = NFine // NCoarse
     boundaryConditions = np.array([[0, 0], [0, 0]])
     NpFine = np.prod(NFine+1)
@@ -205,6 +205,7 @@ def nonlinear_adaptive(NFine,NCoarse,k,Anonlin,rhs,u0,Amicro0,Alin,tolmacro,tolm
     resmacro = np.inf
     #resmacro = np.linalg.norm((basis.T*Knonlin*modifiedBasis)[free][:,free]*uFull[free] - (basis.T*MFull*rhs)[free])
     it = 0
+    errors=[]
 
     while resmacro > tolmacro and it < maxit:
         print('computing error indicators', end='', flush=True)
@@ -215,7 +216,7 @@ def nonlinear_adaptive(NFine,NCoarse,k,Anonlin,rhs,u0,Amicro0,Alin,tolmacro,tolm
         E = {i: [E_vh[i], E_Rf[i]] for i in range(np.size(E_vh)) if E_vh[i]>0 or E_Rf[i]>0}
 
         #loop over elements with possible recomputation of correctors
-        KmsijT,correctorsListT,RmsijT,correctorsRhsT,amicro = UpdateElements(tolmicro*resmacro,E,KmsijT,correctorsListT,RmsijT,correctorsRhsList,amicro)
+        KmsijT,correctorsListT,RmsijT,correctorsRhsT,amicro = UpdateElements(tolmicro,E,KmsijT,correctorsListT,RmsijT,correctorsRhsList,amicro)
 
         #LOD solve
         KFull = pglod.assembleMsStiffnessMatrix(world, patchT, KmsijT)
@@ -248,7 +249,11 @@ def nonlinear_adaptive(NFine,NCoarse,k,Anonlin,rhs,u0,Amicro0,Alin,tolmacro,tolm
         print('residual in {}th iteration is {}'.format(it, np.linalg.norm((basis.T*Knonlin*modifiedBasis)[free][:,free]*uFull[free] - (basis.T*MFull*rhs-RFull)[free])), end='\n', flush=True)
         print('linearization error is {}'.format(resmacro))
 
-    return uFull,uLodFine, amacro
+        if uref is not None:
+            errorL2 = np.sqrt(np.dot(uref - uLodFine, MFull * (uref - uLodFine)))
+            errors.append(errorL2)
+
+    return uFull,uLodFine, amacro, errors
 
 
 def test_nonlinear_adaptive():
@@ -341,13 +346,20 @@ def test_nonlinear_adaptive():
         Amicro0 = Alin(tcoords, np.zeros_like(tcoords))
         tolmacro = 1e-4 #overwrites tolmacro!
         tollin = 1e-6
-        tolmicro = np.inf #used as factor atm
-        uLOD, uLODfine,amacro = nonlinear_adaptive(NFine,NCoarse,k,Anonlin,f,uLOD,Amicro0,Alin,tolmacro,tolmicro, tollin, maxiter)
+        tolmicro = 0
+        uLOD, uLODfine,amacro, errors = nonlinear_adaptive(NFine,NCoarse,k,Anonlin,f,uLOD,Amicro0,Alin,tolmacro,tolmicro, maxiter, uFullref)
         uLODfinegrid = uLODfine.reshape(NFine+1, order='C')
 
         SFull = fem.assemblePatchMatrix(NFine, world.ALocFine, np.ones(NtFine))
+        MFull = fem.assemblePatchMatrix(NFine, world.MLocFine)
         error = np.sqrt(np.dot(uFullref-uLODfine, SFull*(uFullref-uLODfine)))/np.sqrt(np.dot(uLODfine, SFull*uLODfine))
         print('relative H1semi error {}'.format(error))
+
+        errorL2 = np.sqrt(np.dot(uFullref - uLODfine, MFull * (uFullref - uLODfine))) / np.sqrt(
+            np.dot(uLODfine, MFull * uLODfine))
+        print('relative L2 error {}'.format(errorL2))
+
+        print('development of L2 error {}'.format(errors))
 
 
         if N == 16:
