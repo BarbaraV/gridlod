@@ -266,7 +266,6 @@ def estimatorAlphaTildeA1mod(patch, muTPrimeList, aPatchRefList, aPatchNew, alph
     indic1 = np.zeros(len(aPatchRefList))
     kappaMaxA = np.zeros(len(aPatchRefList))
     tildeATPrime = tildeA[TPrimeIndices]
-    kappaMaxAtildeA = np.max(np.max(np.abs(np.sqrt(aTPrime/np.abs(tildeATPrime))), axis=1))
 
     for i in range(len(aPatchRefList)):
         aOld = aPatchRefList[i]
@@ -280,14 +279,46 @@ def estimatorAlphaTildeA1mod(patch, muTPrimeList, aPatchRefList, aPatchNew, alph
 
         aOldTPrime = aOld[TPrimeIndices]
         aTPrime = aNew[TPrimeIndices]
-        deltaTildeAAOld = np.max(np.abs((aTPrime-tildeATPrime)/np.sqrt(aTPrime * aOldTPrime)), axis=1)
-        kappaMaxAAold = np.max(np.abs(aOldTPrime[elementCoarseIndex]/aTPrime[elementCoarseIndex]))
-        kappaMaxADiff = np.max(np.max(np.abs((aTPrime - aOldTPrime) / np.sqrt(np.abs(aTPrime * tildeATPrime)))))
+        if aNew.ndim == 3:
+            aInvTPrime = np.linalg.inv(aTPrime)
+            aOldInvTPrime = np.linalg.inv(aOldTPrime)
+            tildeAInvTPrime = np.linalg.inv(tildeATPrime)
+            aDiffTPrime = aTPrime - aOldTPrime
+            tildeaDiffTPrime = aTPrime - tildeATPrime
+            deltaTildeAAOld = np.sqrt(np.max(np.linalg.norm(np.einsum('Ttij, Ttjk, Ttkl, Ttlm -> Ttim',
+                                                                     aInvTPrime, tildeaDiffTPrime, tildeaDiffTPrime,
+                                                                     aOldInvTPrime),
+                                                           axis=(2, 3), ord=2),
+                                            axis=1))
+            kappaMaxAAold = np.max(np.linalg.norm(np.einsum('tij, tjk -> tik',
+                                                                aOldTPrime[elementCoarseIndex],
+                                                                aInvTPrime[elementCoarseIndex]),
+                                                      axis=(1, 2), ord=2))
+            kappaMaxADiff = np.max(np.max(np.sqrt(np.linalg.norm(np.einsum('Ttij, Ttjk, Ttkl, Ttlm -> Ttim',
+                                                                     aInvTPrime, aDiffTPrime, aDiffTPrime,
+                                                                     tildeAInvTPrime),
+                                                           axis=(2, 3), ord=2)),
+                                            axis=1))
+            kappaMaxAtildeA = np.max(np.max(np.sqrt(np.linalg.norm(np.einsum('Ttij, Ttjk -> Ttik',
+                                                                aTPrime,
+                                                                tildeAInvTPrime),
+                                                      axis=(2, 3), ord=2)), axis=1))
+            deltaTildeAANew = np.max(np.max(np.sqrt(np.linalg.norm(np.einsum('Ttij, Ttjk, Ttkl, Ttlm -> Ttim',
+                                                                      aInvTPrime, tildeaDiffTPrime, tildeaDiffTPrime,
+                                                                      tildeAInvTPrime),
+                                                            axis=(2, 3), ord=2)),
+                                             axis=1))
+        else:
+            deltaTildeAAOld = np.max(np.abs((aTPrime-tildeATPrime)/np.sqrt(aTPrime * aOldTPrime)), axis=1)
+            kappaMaxAAold = np.max(np.abs(aOldTPrime[elementCoarseIndex]/aTPrime[elementCoarseIndex]))
+            kappaMaxADiff = np.max(np.max(np.abs((aTPrime - aOldTPrime) / np.sqrt(np.abs(aTPrime * tildeATPrime)))))
+            kappaMaxAtildeA = np.max(np.max(np.abs(np.sqrt(aTPrime / np.abs(tildeATPrime))), axis=1))
+            deltaTildeAANew = np.max(
+                np.max(np.abs((aTPrime - tildeATPrime) / np.sqrt(np.abs(aTPrime * tildeATPrime))), axis=1))
         kappaMaxA[i] = np.min([kappaMaxAtildeA, kappaMaxADiff], axis=0)
         indic1[i] = np.sqrt(kappaMaxAAold * np.sum(deltaTildeAAOld**2 * muTPrimeList[i]))
         EQTtildeA[i] = lod.computeErrorIndicatorCoarseFromCoefficients(patch,muTPrimeList[i],aOld,tildeA)
 
-    deltaTildeAANew = np.max(np.max(np.abs((aTPrime-tildeATPrime)/np.sqrt(np.abs(aTPrime * tildeATPrime))), axis=1))
     indicMin = np.min(indic1 + deltaTildeAANew * EQTtildeA)
     indicSum = np.sum(np.abs(alpha) * kappaMaxA * EQTtildeA)
 
