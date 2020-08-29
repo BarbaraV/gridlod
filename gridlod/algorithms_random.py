@@ -3,7 +3,7 @@ import copy
 
 from gridlod import multiplecoeff, coef, interp, lod, pglod
 from gridlod.world import PatchPeriodic
-from gridlod.build_coefficient import build_checkerboardbasis2
+from gridlod.build_coefficient import build_checkerboardbasis
 
 
 def computeCSI_offline(world, NepsilonEelement, alpha, beta, k, boundaryConditions):
@@ -11,9 +11,9 @@ def computeCSI_offline(world, NepsilonEelement, alpha, beta, k, boundaryConditio
     middle = NCoarse[0] //2
     patch = PatchPeriodic(world, k, middle)
 
-    aRefList = build_checkerboardbasis2(patch.NPatchCoarse, NepsilonEelement, world.NCoarseElement, alpha, beta)
+    aRefList = build_checkerboardbasis(patch.NPatchCoarse, NepsilonEelement, world.NCoarseElement, alpha, beta)
 
-    #csiList = []
+    muTPrimeList = []
     KmsijList = []
     #correctorsList = []
 
@@ -31,40 +31,54 @@ def computeCSI_offline(world, NepsilonEelement, alpha, beta, k, boundaryConditio
         _, correctorsRef, KmsijRef, csiTRef = computeKmsij(middle,aRef,k,boundaryConditions)
         #csiList.append(csiTRef)
         KmsijList.append(KmsijRef)
+        muTPrimeList.append(csiTRef.muTPrime)
         #correctorsList.append(correctorsListRef)
         #print()
 
-    return aRefList, KmsijList
+    return aRefList, KmsijList, muTPrimeList
 
-def compute_combined_MsStiffness(world,aPert, aRefList, KmsijList,k):
+def compute_combined_MsStiffness(world,aPert, aRefList, KmsijList,muTPrimeList,k):
     computePatch = lambda TInd: PatchPeriodic(world, k, TInd)
     patchT = list(map(computePatch, range(world.NtCoarse)))
 
     def computeAlpha(TInd):
         print('.', end='', flush=True)
-        rPatch = lambda: coef.localizeCoefficient(patchT[TInd], aPert, periodic=True)
-        #muTPrimeList = [csi.muTPrime for csi in csiList]
+        rPatch = lambda: coef.localizeCoefficient(patchT[TInd], aPert, periodic=True) # scaleCoefficient
+        #aRefListScaled = [aRef for aRef in aRefList]
 
-        alphaT = multiplecoeff.optimizeAlpha(patchT[TInd], aRefList, rPatch)
-        #alphaT = alpha*mu
-        #by the above function you can switch the choice of alpha optimization
+        #alphaT = multiplecoeff.optimizeAlpha(patchT[TInd], aRefListScaled, rPatch)
+        #direct dtermination of alpha without optimization - for randomcheckerboardbasis only
+        alphaT = np.zeros(len(aRefList))
+        alphaScaled = np.min(aRefList[1])
+        betaScaled = np.max(aRefList[1])
+        Ntepsilon = np.prod(patchT[TInd].NPatchFine//(patchT[TInd].NPatchCoarse * Nepsilon//NCoarse))#indexing only correct in 1d
+        alphaT[1:] = (rPatch()[np.arange(len(aRefList)-1)*Ntepsilon]-alphaScaled)/(betaScaled-alphaScaled)
+        alphaT[0] = 1.-np.sum(alphaT[1:])
 
-        return alphaT
+        indicatorT = multiplecoeff.estimatorAlphaTildeA1mod(patchT[TInd],muTPrimeList,aRefList,rPatch,alphaT)
+
+        #mu_equivalent = coef.averageCoefficient(coef.localizeCoefficient(patchT[TInd],aPert,periodic=True))\
+                        #*np.array([1./coef.averageCoefficient(aRef) for aRef in aRefList])
+        #alphaT *= mu_equivalent
+
+        return alphaT, indicatorT
 
     KmsijT_list = []
+    error_indicator = []
     #correctorsListT_list = list(copy.deepcopy(correctors_old[0]))
 
     for T in range(world.NtCoarse):
-        alphaT = computeAlpha(T)
+        alphaT, indicatorT = computeAlpha(T)
         #correctorsListT_list[T] = list(0 * np.array(correctorsListT_list[T]))
         KmsijT_list.append(np.einsum('i, ijk -> jk', alphaT, KmsijList))
+        error_indicator.append(indicatorT)
 
     KmsijT = tuple(KmsijT_list)
     #correctorsListT = tuple(correctorsListT_list)
 
     KFull = pglod.assembleMsStiffnessMatrix(world, patchT, KmsijT, periodic=True)
 
-    return KFull
+    return KFull, error_indicator
 
 
 #==================================================================================================
@@ -78,23 +92,23 @@ import matplotlib.pyplot as plt
 
 NFine = np.array([256]) #,64
 NpFine = np.prod(NFine+1)
-Nepsilon = np.array([16]) #,16
-NCoarse = np.array([8]) #,8
-k=2
-NSamples = 10
+Nepsilon = np.array([256]) #,16
+NCoarse = np.array([32]) #,8
+k=4
+NSamples = 1000
 
 boundaryConditions = None #np.array([[0, 0], [0, 0]])
-alpha = 1.
-beta = 10.
+alpha = 0.1
+beta = 1.
 
 NCoarseElement = NFine // NCoarse
 world = World(NCoarse, NCoarseElement, boundaryConditions)
 
 xpFine = util.pCoordinates(NFine)
-ffunc = lambda x: 8*np.pi**2*np.sin(2*np.pi*x) #[:,0]*np.cos(2*np.pi*x[:,1])
+ffunc = lambda x: 8*np.pi**2*np.sin(2*np.pi*x)#[:,0])*np.cos(2*np.pi*x[:,1])
 f = ffunc(xpFine).flatten()
 
-aRefList, KmsijList = computeCSI_offline(world, Nepsilon // NCoarse, alpha, beta, k, boundaryConditions)
+aRefList, KmsijList,muTPrimeList = computeCSI_offline(world, Nepsilon // NCoarse, alpha, beta, k, boundaryConditions)
 
 mean_error = 0.
 
@@ -170,14 +184,14 @@ for N in range(NSamples):
     uLodCoarsepert = basis * uFullpert
 
     #combined LOD
-    KFull = compute_combined_MsStiffness(world,aPert,aRefList,KmsijList,k)
+    KFull, error_indicator = compute_combined_MsStiffness(world,aPert,aRefList,KmsijList,muTPrimeList,k)
     uFull, _ = pglod.solvePeriodic(world, KFull, bFull, faverage, boundaryConditions)
     uLodCoarse = basis * uFull
 
     L2norm = np.sqrt(np.dot(uLodCoarsepert, MFull * uLodCoarsepert))
-    error = np.sqrt(np.dot(uLodCoarse-uLodCoarsepert, MFull*(uLodCoarse-uLodCoarsepert))/L2norm)
+    error = np.sqrt(np.dot(uLodCoarse-uLodCoarsepert, MFull*(uLodCoarse-uLodCoarsepert)))/L2norm
     #L2normref = np.sqrt(np.dot(uFEM, MFull * uFEM))
-    #error_ref = np.sqrt(np.dot(uLodCoarse - uFEM, MFull * (uLodCoarse - uFEM)) / L2normref)
+    #error_ref = np.sqrt(np.dot(uLodCoarse - uFEM, MFull * (uLodCoarse - uFEM))) / L2normref
     print("L2-error in {}th sample between LOD approaches is: {}".format(N, error))
     #print("L2-error in {}th sample to FEM ref sol is: {}".format(N, error_ref))
     mean_error += error
@@ -186,7 +200,10 @@ for N in range(NSamples):
     plt.plot(util.pCoordinates(world.NWorldFine), uLodCoarsepert, color='r', label='true')
     plt.plot(util.pCoordinates(world.NWorldFine), uLodCoarse, color='b', label='with reference')
     plt.legend()
+    plt.show()'''
 
+    '''plt.figure('error indicators')
+    plt.bar(util.tCoordinates(world.NWorldCoarse).flatten(), np.array(error_indicator), width=0.03, color='r')
     plt.show()'''
 
 '''    fig = plt.figure()
