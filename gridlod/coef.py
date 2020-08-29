@@ -19,3 +19,30 @@ def localizeCoefficient(patch, aFine, periodic = False):
         aFineLocalized = aFine[coarsetStartIndex + coarsetIndexMap]
     return aFineLocalized
 
+
+def scaleCoefficient(aFine):
+
+    aMean = None
+
+    if aFine.ndim == 1:
+        aMean = np.mean(aFine, axis=0)
+    elif aFine.ndim == 3:
+        aMean = np.mean(np.trace(aFine, axis1=1, axis2=2))
+    else:
+        NotImplementedError('only scalar- and matrix-valued coefficients supported')
+
+    return aFine/aMean
+
+def averageCoefficient(aFine):
+
+    aMean = None
+
+    if aFine.ndim == 1:
+        aMean = np.mean(aFine, axis=0)
+    elif aFine.ndim == 3:
+        aMean = np.mean(np.trace(aFine, axis1=1, axis2=2))
+    else:
+        NotImplementedError('only scalar- and matrix-valued coefficients supported')
+
+    return aMean
+
