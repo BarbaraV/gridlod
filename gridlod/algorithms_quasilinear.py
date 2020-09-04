@@ -12,7 +12,8 @@ def computeRefSol(world, Alin, f, u0, tol, maxiter):
     tcoords = util.tCoordinates(world.NWorldFine)
     pcoords = util.pCoordinates(world.NWorldFine)
 
-    aFine = Alin(tcoords, func.evaluateCQ1D(world.NWorldFine, uref, tcoords))
+    aFine = Alin(tcoords, func.evaluateCQ1(world.NWorldFine, uref, tcoords),
+                 func.evaluateCQ1D(world.NWorldFine, uref, tcoords))
     assert (aFine.ndim == 1 or aFine.ndim == 3)
     if aFine.ndim == 1:
         Aloc = world.ALocFine
@@ -34,47 +35,27 @@ def computeRefSol(world, Alin, f, u0, tol, maxiter):
         uFree = sparse.linalg.spsolve(AFree, bFree)
         uref[free] = uFree
 
-        '''if aFine.ndim == 1:
-            aFineGrid = aFine.reshape(world.NWorldFine, order ='C')
-            fig = plt.figure()
-            ax1 = fig.add_subplot(1, 1, 1)
-
-            im1 = ax1.imshow(aFineGrid, \
-                             extent=(
-                             pcoords[:, 0].min(), pcoords[:, 0].max(), pcoords[:, 1].min(), pcoords[:, 1].max()),
-                             cmap=plt.cm.hot)
-            fig.colorbar(im1, ax=ax1)
-
-            plt.show()
-
-        else:
-            aFineGrid1 = aFine[:,0,0].reshape(world.NWorldFine, order='C')
-            aFineGrid2 = aFine[:,1,1].reshape(world.NWorldFine, order='C')
-            fig = plt.figure()
-            ax1 = fig.add_subplot(1, 2, 1)
-            ax2 = fig.add_subplot(1, 2, 2)
-
-            im1 = ax1.imshow(aFineGrid1, \
-                             extent=(
-                                 pcoords[:, 0].min(), pcoords[:, 0].max(), pcoords[:, 1].min(), pcoords[:, 1].max()),
-                             cmap=plt.cm.hot)
-            fig.colorbar(im1, ax=ax1)
-
-            im2 = ax2.imshow(aFineGrid2, \
-                             extent=(
-                                 pcoords[:, 0].min(), pcoords[:, 0].max(), pcoords[:, 1].min(), pcoords[:, 1].max()),
-                             cmap=plt.cm.hot)
-            fig.colorbar(im2, ax=ax2)
-
-            plt.show()'''
-
         # update res and it
-        aFine = Alin(tcoords, func.evaluateCQ1D(world.NWorldFine, uref, tcoords))
+        aFine = Alin(tcoords, func.evaluateCQ1(world.NWorldFine, uref, tcoords),
+                     func.evaluateCQ1D(world.NWorldFine, uref, tcoords))
         AFull = fem.assemblePatchMatrix(world.NWorldFine, Aloc, aFine)
         resref = np.linalg.norm(AFull[free][:, free] * uref[free] - (MFull * f(pcoords))[free])
         itref += 1
 
         print('residual in {}th iteration is {}'.format(itref, resref), end='\n', flush=True)
+
+    uFineGrid = uref.reshape(world.NWorldFine+1, order ='C')
+    fig = plt.figure()
+    ax1 = fig.add_subplot(1, 1, 1)
+
+    im1 = ax1.imshow(uFineGrid, \
+                     extent=(
+                     pcoords[:, 0].min(), pcoords[:, 0].max(), pcoords[:, 1].min(), pcoords[:, 1].max()),
+                     cmap=plt.cm.hot)
+    fig.colorbar(im1, ax=ax1)
+
+    plt.show()
+
 
     return uref
 
@@ -147,7 +128,8 @@ def adaptive_nonlinear_single(world, Alin, f, u0, tolmacro, tolmicro, maxiter):
 
     # precomputation
     basis = fem.assembleProlongationMatrix(world.NWorldCoarse, world.NCoarseElement)
-    aFine = Alin(tcoords, func.evaluateCQ1D(world.NWorldFine, basis * u0, tcoords))
+    aFine = Alin(tcoords, func.evaluateCQ1(world.NWorldFine, basis*u0, tcoords),
+                 func.evaluateCQ1D(world.NWorldFine, basis * u0, tcoords))
     aFineOld = np.copy(aFine)
 
     # Use mapper to distribute computations (mapper could be the 'map' built-in or e.g. an ipyparallel map)
@@ -185,7 +167,8 @@ def adaptive_nonlinear_single(world, Alin, f, u0, tolmacro, tolmicro, maxiter):
         uLodFine = modifiedBasis * uFull
 
         aFineOld = np.copy(aFine)
-        aFine = Alin(tcoords, func.evaluateCQ1D(world.NWorldFine, uLodFine, tcoords))  # basis*uFull
+        aFine = Alin(tcoords, func.evaluateCQ1(world.NWorldFine, uLodFine, tcoords),
+                     func.evaluateCQ1D(world.NWorldFine, uLodFine, tcoords))  # basis*uFull
 
         # update res and it
         assert (aFine.ndim == 1 or aFine.ndim == 3)
@@ -250,9 +233,6 @@ def adaptive_nonlinear_multiple(world, Alin, f, u0, tolmacro, tolmicro, maxiter,
                 assert(len(alphaTList[j]) == len(correctors_old[T]))
                 KmsijT_list[T] = np.einsum('i, ijk ->jk', alphaTList[j], Kmsij_old[T])
                 correctorsListT_list[T] = np.einsum('i, ijk -> jk', alphaTList[j], np.array(correctors_old[T]))
-                #for kk in range(len(Kmsij_old)):
-                #    KmsijT_list[T] += alphaTList[j][kk] * Kmsij_old[kk][T]
-                #    correctorsListT_list[T] += alphaTList[j][kk] * np.array(correctors_old[kk][T])
                 j += 1
 
             if np.size(Elements_to_be_updated) != 0:
@@ -286,7 +266,8 @@ def adaptive_nonlinear_multiple(world, Alin, f, u0, tolmacro, tolmicro, maxiter,
 
     # precomputation
     basis = fem.assembleProlongationMatrix(world.NWorldCoarse, world.NCoarseElement)
-    aFine = Alin(tcoords, func.evaluateCQ1D(world.NWorldFine, basis * u0, tcoords))
+    aFine = Alin(tcoords, func.evaluateCQ1(world.NWorldFine, basis*u0, tcoords),
+                 func.evaluateCQ1D(world.NWorldFine, basis * u0, tcoords))
     aFineOld = np.copy(aFine)
 
     # Use mapper to distribute computations (mapper could be the 'map' built-in or e.g. an ipyparallel map)
@@ -337,7 +318,8 @@ def adaptive_nonlinear_multiple(world, Alin, f, u0, tolmacro, tolmicro, maxiter,
                 csiList[T].append(csiT[T])
                 aFinePatchList[T].append(coef.localizeCoefficient(patchT[T], aFineOld))
 
-        aFine = Alin(tcoords, func.evaluateCQ1D(world.NWorldFine, uLodFine, tcoords))  # basis*uFull
+        aFine = Alin(tcoords, func.evaluateCQ1(world.NWorldFine, uLodFine, tcoords),
+                     func.evaluateCQ1D(world.NWorldFine, uLodFine, tcoords))  # basis*uFull
 
         # update res and it
         assert (aFine.ndim == 1 or aFine.ndim == 3)
@@ -358,16 +340,17 @@ def adaptive_nonlinear_multiple(world, Alin, f, u0, tolmacro, tolmicro, maxiter,
 
 #=====================================================================================================
 # testing
+import time
 
 NFine = np.array([256, 256])
 NpFine = np.prod(NFine + 1)
 NtFine = np.prod(NFine)
 NCoarse = np.array([16,16])
 
-maxiter = 100
+maxiter = 200
 tolmacro = 1e-11
 
-epsilon = 1/8
+epsilon = 1./64.
 boundaryConditions = np.array([[0, 0], [0, 0]])
 c = lambda x: 1+x[:,0]*x[:,1] + (1.1+np.pi/3+np.sin(2*np.pi*x[:,0]/epsilon))/(1.1+np.sin(2*np.pi*x[:,1]/epsilon))
 #------------------------------------------------------------------------------------------------------------------
@@ -377,14 +360,36 @@ c = lambda x: 1+x[:,0]*x[:,1] + (1.1+np.pi/3+np.sin(2*np.pi*x[:,0]/epsilon))/(1.
 #Alin = lambda x, xi0: c(x)*(1+1/np.sqrt(1+np.linalg.norm(xi0,2,axis=-1)**2))
 #-------------------------------------------------------------------------------------------------------------------
 #try Huber with a matrix-valued Alin (artificial)
-def Alin_matrix(x,xi0):
-    a = np.array([[c(x)*(1+1/np.sqrt(1+np.linalg.norm(xi0,2,axis=-1)**2)), np.zeros(NtFine)],
-                  [np.zeros(NtFine), c(x)*(1+10/np.sqrt(1+100*np.linalg.norm(xi0,2,axis=-1)**2))]])
+#gamma = 0.5
+#def Alin_matrix(x,s,xi):
+#    a = np.array([[c(x)*(1+1/(1+np.linalg.norm(xi,2,axis=-1)**2)**gamma), np.zeros(NtFine)],
+#                  [np.zeros(NtFine), c(x)*(1+10/(1+100*np.linalg.norm(xi,2,axis=-1)**2)**gamma)]])
+#    a = a.swapaxes(0,2)
+#    return a
+#Alin = Alin_matrix
+
+#p-Laplace type thing
+#p = 3.
+#def Alin(x, s, xi):
+#    a = 1. + ((1 + np.linalg.norm(xi,2,axis=-1)**2)**((p-2)/2.))
+#    return c(x)*a
+
+#f = lambda x: 100*np.ones(np.shape(x)[0])
+
+#similar to Abdulle, Bai, Vilmart DCDS-S 2015
+def Alin_matrix(x,s,xi):
+    a = np.array([[(x[:,0]**2+0.2)+(x[:,1]*np.sin(np.pi*s)+2)*(np.sin(2*np.pi*x[:,0]/epsilon)+2), np.zeros(NtFine)],
+                  [np.zeros(NtFine), (1./(s+1)*np.exp(x[:,1])+0.05)+(x[:,0]*x[:,1]+1)*(np.sin(2*np.pi*x[:,1]/epsilon)+2)]])
     a = a.swapaxes(0,2)
     return a
 Alin = Alin_matrix
+f = lambda x: 50*np.exp((x[:,0]-0.2)**2+(x[:,1]-0.3)**2)
 
-f = lambda x: 100*np.ones(np.shape(x)[0])
+#Pollock J. Comput. Appl. Math. 2016
+#epsilon = 6e-3
+#def Alin(x,s,xi):
+#    return 10.+np.sin(s/epsilon)+np.arctan(s/epsilon)
+#f = lambda x: (1-x[:,0])*(1-x[:,1])*(np.exp(8*x[:,0]**2)-1)*(np.exp(8*x[:,1]**2)-1)
 
 NCoarseElement = NFine // NCoarse
 world = World(NCoarse, NCoarseElement, boundaryConditions)
@@ -394,9 +399,12 @@ u = computeRefSol(world, Alin, f, u0, tolmacro, maxiter)
 # LOD
 k=2
 tolmacro = 1e-5
-tolmicro = 0.7# is a kind of factor at the moment
+tolmicro = .7# is a kind of factor at the moment
 u0LOD = np.zeros(world.NpCoarse)
-uLOD, uLODfine = adaptive_nonlinear_multiple(world,Alin,f, u0LOD, tolmacro,tolmicro, maxiter)
+
+tic = time.perf_counter()
+uLOD, uLODfine = adaptive_nonlinear_multiple(world,Alin,f, u0LOD, tolmacro,tolmicro, maxiter, closest=True)
+toc = time.perf_counter()
 
 SFull = fem.assemblePatchMatrix(NFine, world.ALocFine, np.ones(NtFine))
 MFull = fem.assemblePatchMatrix(NFine, world.MLocFine)
@@ -406,3 +414,5 @@ print('relative H1semi error {}'.format(error))
 errorL2 = np.sqrt(np.dot(u - uLODfine, MFull * (u - uLODfine))) / np.sqrt(
     np.dot(u, MFull * u))
 print('relative L2 error {}'.format(errorL2))
+
+print('time taken {}'.format(toc-tic))
