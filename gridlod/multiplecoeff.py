@@ -20,23 +20,28 @@ def optimizeAlpha(patch, aPatchRefList, aPatchNew):
     elementCoarseIndex = util.convertpCoordIndexToLinearIndex(NPatchCoarse - 1, patch.iElementPatchCoarse)
     TInd = util.convertpCoordIndexToLinearIndex(patch.NPatchCoarse - 1, patch.iElementPatchCoarse)
 
+    aNew = aPatchNew
+    aTPrime = aNew[TPrimeIndices]
+    for i in range(len(aPatchRefList)):
+        ### In case aNew and aOld dimensions do not match ###
+        if aNew.ndim == 3 and aPatchRefList[i].ndim == 1:
+            aEye = np.tile(np.eye(2), [np.prod(NPatchFine), 1, 1])
+            aPatchRefList[i] = np.einsum('tji, t-> tji', aEye, aPatchRefList[i])
+        if aNew.ndim == 1 and aPatchRefList[i].ndim == 3:
+            aEye = np.tile(np.eye(2), [np.prod(NPatchFine), 1, 1])
+            aNew = np.einsum('tji, t -> tji', aEye, aNew)
+    aOldTPrime = [aOld[TPrimeIndices] for aOld in aPatchRefList]
+    #aTPrimeList = [aTPrime for _ in aPatchRefList]
+    #aDiffTPrime = aTPrimeList - aOldTPrime
+
     def approxA(beta):
         assert (len(beta) == len(aPatchRefList))
-        aNew = aPatchNew
-        aTPrime = aNew[TPrimeIndices]
-        scaledAT = np.zeros_like(aTPrime)
-        for i in range(len(aPatchRefList)):
-            aOld = aPatchRefList[i]
-            ### In case aNew and aOld dimensions do not match ###
-            if aNew.ndim == 3 and aOld.ndim == 1:
-                aEye = np.tile(np.eye(2), [np.prod(NPatchFine), 1, 1])
-                aOld = np.einsum('tji, t-> tji', aEye, aOld)
-            if aNew.ndim == 1 and aOld.ndim == 3:
-                aEye = np.tile(np.eye(2), [np.prod(NPatchFine), 1, 1])
-                aNew = np.einsum('tji, t -> tji', aEye, aNew)
-
-            aOldTPrime = aOld[TPrimeIndices]
-            scaledAT += beta[i]*(aTPrime-aOldTPrime)
+        if aNew.ndim == 1:
+            scaledAT = aTPrime - np.einsum('i, itj -> tj', beta, np.array(aOldTPrime))
+            #scaledAT = np.einsum('i, ij->j', beta, np.array(aDiffTPrime))
+        else:
+            scaledAT = aTPrime - np.einsum('i, itsjk -> tsjk', beta, np.array(aOldTPrime))
+            # scaledAT = np.einsum('i, itsjk->tsjk', beta, np.array(aDiffTPrime))
         return np.sqrt(np.sum(np.max(np.abs(scaledAT), axis=1) ** 2))
 
     betastart = np.zeros(len(aPatchRefList))
