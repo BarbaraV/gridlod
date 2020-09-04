@@ -1,12 +1,12 @@
 import numpy as np
 from gridlod import util
 
-def build_randomcheckerboard(Nepsilon, NFine, alpha, beta):
+def build_randomcheckerboard(Nepsilon, NFine, alpha, beta, p):
     # builds a random checkerboard coefficient with spectral bounds alpha and beta,
     # piece-wise constant on mesh with Nepsilon blocks
     # returns a fine coefficient on mesh with NFine blocks
     Ntepsilon = np.prod(Nepsilon)
-    values = alpha + (beta-alpha) * np.random.binomial(1,0.25,Ntepsilon)#np.random.randint(0,2,Ntepsilon)
+    values = alpha + (beta-alpha) * np.random.binomial(1,p,Ntepsilon)#np.random.randint(0,2,Ntepsilon)
 
     def randomcheckerboard(x):
         index = (x*Nepsilon).astype(int)
