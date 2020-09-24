@@ -9,12 +9,18 @@ def localizeCoefficient(patch, aFine, periodic = False):
     NPatchFine = NPatchCoarse*NCoarseElement
     iPatchWorldFine = iPatchWorldCoarse*NCoarseElement
     NWorldFine = patch.world.NWorldFine
+    NtPatchFine = np.prod(NPatchFine)
+    d = np.size(iPatchWorldCoarse)
     
     # a
     coarsetIndexMap = util.lowerLeftpIndexMap(NPatchFine-1, NWorldFine-1)
     coarsetStartIndex = util.convertpCoordIndexToLinearIndex(NWorldFine-1, iPatchWorldFine)
     if periodic:
-        aFineLocalized = aFine[(coarsetStartIndex + coarsetIndexMap) % patch.world.NtFine]
+        #this is not really efficient yet!
+        coarsetIndicesTemp = iPatchWorldFine.reshape((d,1)) + util.convertpLinearIndexToCoordIndex(NWorldFine-1, coarsetIndexMap)
+        coarsetIndices = np.array([util.convertpCoordIndexToLinearIndex(NWorldFine-1, coarsetIndicesTemp[:, ii] % NWorldFine)
+                               for ii in range(NtPatchFine)])
+        aFineLocalized = aFine[coarsetIndices]
     else:
         aFineLocalized = aFine[coarsetStartIndex + coarsetIndexMap]
     return aFineLocalized
