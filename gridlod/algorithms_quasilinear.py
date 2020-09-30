@@ -195,11 +195,10 @@ def adaptive_nonlinear_multiple(world, Alin, f, u0, tolmacro, tolmicro, maxiter,
         muTPrimeList = [csi.muTPrime for csi in csiList[TInd]]
 
         if closest:
-            E_vhList = []
             alpha = np.zeros(len(rPatchList))
-            for ii in range(len(rPatchList)):
-                E_vhList.append(lod.computeErrorIndicatorCoarseFromCoefficients(patchT[TInd],
-                                                                                muTPrimeList[ii], rPatchList[ii], aPatch))
+            computeErrorIndic = lambda ii: lod.computeErrorIndicatorCoarseFromCoefficients(patchT[TInd],
+                                                                                muTPrimeList[ii], rPatchList[ii], aPatch)
+            E_vhList = list(map(computeErrorIndic, range(len(rPatchList))))
             E_vh = min(E_vhList)
             alpha[np.argmin(np.array(E_vhList))] = 1.
         else:
@@ -231,8 +230,13 @@ def adaptive_nonlinear_multiple(world, Alin, f, u0, tolmacro, tolmicro, maxiter,
             for T in np.setdiff1d(range(world.NtCoarse), Elements_to_be_updated):
                 assert(len(alphaTList[j]) == len(Kmsij_old[T]))
                 assert(len(alphaTList[j]) == len(correctors_old[T]))
-                KmsijT_list[T] = np.einsum('i, ijk ->jk', alphaTList[j], Kmsij_old[T])
-                correctorsListT_list[T] = np.einsum('i, ijk -> jk', alphaTList[j], np.array(correctors_old[T]))
+                if closest:
+                    index = np.nonzero(alphaTList[j])[0][0]
+                    KmsijT_list[T] = Kmsij_old[T][index]
+                    correctorsListT_list[T] = correctors_old[T][index]
+                else:
+                    KmsijT_list[T] = np.einsum('i, ijk ->jk', alphaTList[j], Kmsij_old[T])
+                    correctorsListT_list[T] = np.einsum('i, ijk -> jk', alphaTList[j], np.array(correctors_old[T]))
                 j += 1
 
             if np.size(Elements_to_be_updated) != 0:
