@@ -38,8 +38,13 @@ def assembleBasisCorrectors(world, patchT, basisCorrectorsListT, periodic=False)
         patchpStartIndex = util.convertpCoordIndexToLinearIndex(NWorldFine, iPatchWorldFine)
 
         if periodic:
-            rowsT = (patchpStartIndex + patchpIndexMap) % (NpCoarse-1)
-            colsT = (TpStartIndices[TInd] + TpIndexMap) % (NpCoarse-1)
+            rowsTpCoord = (patch.iPatchWorldCoarse.T + util.convertpLinearIndexToCoordIndex(NWorldCoarse,
+                                                                                            patchpIndexMap).T) \
+                          % NWorldCoarse
+            rowsT = util.convertpCoordIndexToLinearIndex(NWorldCoarse, rowsTpCoord)
+            colsTbase = TpStartIndices[TInd] + TpIndexMap
+            colsTpCoord = util.convertpLinearIndexToCoordIndex(NWorldCoarse, colsTbase).T % NWorldCoarse
+            colsT = util.convertpCoordIndexToLinearIndex(NWorldCoarse, colsTpCoord)
         else:
             rowsT = patchpStartIndex + patchpIndexMap
             colsT = TpStartIndices[TInd] + TpIndexMap
