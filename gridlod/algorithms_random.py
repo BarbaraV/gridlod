@@ -2,12 +2,11 @@ import numpy as np
 import copy
 import time
 
-from gridlod import multiplecoeff, coef, interp, lod, pglod
+from gridlod import multiplecoeff, coef, interp, lod, pglod, build_coefficient
 from gridlod.world import PatchPeriodic
-from gridlod.build_coefficient import build_checkerboardbasis
 
 
-def computeCSI_offline(world, NepsilonEelement, alpha, beta, k, boundaryConditions):
+def computeCSI_offline(world, NepsilonElement, alpha, beta, k, boundaryConditions):
     if dim == 2:
         middle = world.NWorldCoarse[1] // 2 * world.NWorldCoarse[0] + world.NWorldCoarse[0] // 2 #2d!!!
     elif dim == 1:
@@ -15,49 +14,41 @@ def computeCSI_offline(world, NepsilonEelement, alpha, beta, k, boundaryConditio
     patch = PatchPeriodic(world, k, middle)
 
     tic = time.perf_counter()
-    aRefList = build_checkerboardbasis(patch.NPatchCoarse, NepsilonEelement, world.NCoarseElement, alpha, beta)
+    #aRefList = build_coefficient.build_checkerboardbasis(patch.NPatchCoarse, NepsilonElement, world.NCoarseElement, alpha, beta)
+    aRefList = build_coefficient.build_inclusionbasis_2d(patch.NPatchCoarse,NepsilonElement, world.NCoarseElement, alpha, beta, left, right)
     toc = time.perf_counter()
     time_basis = toc-tic
 
-    muTPrimeList = []
-    KmsijList = []
-    timeMatrixList = []
 
     def computeKmsij(TInd, aPatch, k, boundaryConditions):
         #print('.', end='', flush=True)
+        tic = time.perf_counter()
         patch = PatchPeriodic(world, k, TInd)
         IPatch = lambda: interp.L2ProjectionPatchMatrix(patch, boundaryConditions)
 
         correctorsList = lod.computeBasisCorrectors(patch, IPatch, aPatch)
         csi = lod.computeBasisCoarseQuantities(patch, correctorsList, aPatch)
-        return patch, correctorsList, csi.Kmsij, csi
-
-    for aRef in aRefList:
-        #print('computing correctors', end='', flush=True)
-        tic = time.perf_counter()
-        _, correctorsRef, KmsijRef, csiTRef = computeKmsij(middle,aRef,k,boundaryConditions)
         toc = time.perf_counter()
-        #csiList.append(csiTRef)
-        KmsijList.append(KmsijRef)
-        muTPrimeList.append(csiTRef.muTPrime)
-        timeMatrixList.append(toc-tic)
-        #correctorsList.append(correctorsListRef)
-        #print()
+        return patch, correctorsList, csi.Kmsij, csi.muTPrime, toc-tic
 
-    return aRefList, KmsijList, muTPrimeList, time_basis,timeMatrixList
+    computeSingleKms = lambda aRef: computeKmsij(middle, aRef, k, boundaryConditions)
+    _, _, KmsijList, muTPrimeList, timeMatrixList = zip(*map(computeSingleKms, aRefList))
+
+    return aRefList, KmsijList, muTPrimeList, time_basis, timeMatrixList
 
 def compute_combined_MsStiffness(world,aPert, aRefList, KmsijList,muTPrimeList,k, compute_indicator=False):
     computePatch = lambda TInd: PatchPeriodic(world, k, TInd)
     patchT = list(map(computePatch, range(world.NtCoarse)))
 
-    def computeAlpha(TInd):
+    def compute_combinedT(TInd):
         #print('.', end='', flush=True)
-        rPatch = lambda: coef.localizeCoefficient(patchT[TInd], aPert, periodic=True) # scaleCoefficient
+        rPatch = lambda: coef.localizeCoefficient(patchT[TInd], aPert, periodic=True)
         #aRefListScaled = [aRef for aRef in aRefList]
 
-        #alphaT = multiplecoeff.optimizeAlpha(patchT[TInd], aRefListScaled, rPatch)
-        #direct dtermination of alpha without optimization - for randomcheckerboardbasis only
-        alphaT = np.zeros(len(aRefList))
+        #alphaT = multiplecoeff.optimizeAlpha(patchT[TInd], aRefList, rPatch)
+
+        #direct determination of alpha without optimization - for randomcheckerboardbasis only
+        '''alphaT = np.zeros(len(aRefList))
         alphaScaled = np.min(aRefList[1])
         betaScaled = np.max(aRefList[1])
         NFineperEpsilon = NFine//Nepsilon
@@ -66,10 +57,22 @@ def compute_combined_MsStiffness(world,aPert, aRefList, KmsijList,muTPrimeList,k
             tmp_indx =np.array([np.arange(len(aRefList)-1)//NEpsilonperPatchCoarse[0],
                                 np.arange(len(aRefList)-1)%NEpsilonperPatchCoarse[0]])
             indx = tmp_indx[0]*NFineperEpsilon[1]*patchT[TInd].NPatchFine[0]+ tmp_indx[1]*NFineperEpsilon[0]
-            alphaT[1:] = (rPatch()[indx]-alphaScaled)/(betaScaled-alphaScaled)
+            alphaT[:len(alphaT)-1] = (rPatch()[indx]-alphaScaled)/(betaScaled-alphaScaled)
         elif dim == 1:
-            alphaT[1:] = (rPatch()[np.arange(len(aRefList)-1)*np.prod(NFineperEpsilon)]-alphaScaled)/(betaScaled-alphaScaled)
-        alphaT[0] = 1.-np.sum(alphaT[1:])
+            alphaT[:len(alphaT)-1] = (rPatch()[np.arange(len(aRefList)-1)*np.prod(NFineperEpsilon)]-alphaScaled)/(betaScaled-alphaScaled)
+        alphaT[len(alphaT)-1] = 1.-np.sum(alphaT[:len(alphaT)-1])'''
+
+        #TODO: how to directly determine alpha for "square inclusions with defect" case?
+        alphaT = np.zeros(len(aRefList))
+        NFineperEpsilon = NFine // Nepsilon
+        NEpsilonperPatchCoarse = patchT[TInd].NPatchCoarse * (Nepsilon // NCoarse)
+        tmp_indx = np.array([np.arange(len(aRefList) - 1) // NEpsilonperPatchCoarse[0]+0.5,
+                             np.arange(len(aRefList) - 1) % NEpsilonperPatchCoarse[0] + 0.5])
+        indx = (tmp_indx[0] * NFineperEpsilon[1] * patchT[TInd].NPatchFine[0]).astype(int) \
+                + (tmp_indx[1] * NFineperEpsilon[0]).astype(int)
+        alphaT[:len(alphaT)-1] = (beta - rPatch()[indx])/(beta-alpha)  #passt noch nicht
+        alphaT[len(alphaT)-1] = 1. - np.sum(alphaT[:len(alphaT)-1])
+        assert(np.max(np.abs(rPatch() - np.einsum('i, ij->j', alphaT, aRefList)))<1e-10)
 
         if compute_indicator:
             indicatorT = multiplecoeff.estimatorAlphaTildeA1mod(patchT[TInd],muTPrimeList,aRefList,rPatch,alphaT)
@@ -80,20 +83,13 @@ def compute_combined_MsStiffness(world,aPert, aRefList, KmsijList,muTPrimeList,k
                         #*np.array([1./coef.averageCoefficient(aRef) for aRef in aRefList])
         #alphaT *= mu_equivalent
 
-        return alphaT, indicatorT
+        KmsijT = np.einsum('i, ijk -> jk', alphaT, KmsijList)
 
-    KmsijT_list = []
-    error_indicator = []
-    #correctorsListT_list = list(copy.deepcopy(correctors_old[0]))
+        return KmsijT, indicatorT
 
-    for T in range(world.NtCoarse):
-        alphaT, indicatorT = computeAlpha(T)
-        #correctorsListT_list[T] = list(0 * np.array(correctorsListT_list[T]))
-        KmsijT_list.append(np.einsum('i, ijk -> jk', alphaT, KmsijList))
-        error_indicator.append(indicatorT)
+    KmsijT_list, error_indicator = zip(*map(compute_combinedT, range(world.NtCoarse)))
 
     KmsijT = tuple(KmsijT_list)
-    #correctorsListT = tuple(correctorsListT_list)
 
     KFull = pglod.assembleMsStiffnessMatrix(world, patchT, KmsijT, periodic=True)
 
@@ -141,7 +137,7 @@ def compute_perturbed_MsStiffness(world,aPert, aRef, KmsijRef, muTPrimeRef,k, up
             KmsijT_list = list(np.copy(Kmsij_old))
             i = 0
             for T in Elements_to_be_updated:
-                KmsijT_list[T] = KmsijTNew[i]
+                KmsijT_list[T] = np.copy(KmsijTNew[i])
                 i += 1
 
             KmsijT = tuple(KmsijT_list)
@@ -159,7 +155,7 @@ def compute_perturbed_MsStiffness(world,aPert, aRef, KmsijRef, muTPrimeRef,k, up
     #sortedE = np.sort(E_vh)
     #index = int((1-update_percentage) * (len(E_vh) - 1))
     #tol_relative = sortedE[index]
-    tol_relative = np.quantile(E_vh, 1.-percentage, interpolation='higher')
+    tol_relative = np.quantile(E_vh, 1.-update_percentage, interpolation='higher')
     KmsijRefList = [KmsijRef for _ in range(world.NtCoarse)] #tile up the stiffness matrix for one element
     KmsijT = UpdateElements(tol_relative, E, KmsijRefList)
 
@@ -180,9 +176,9 @@ import matplotlib.pyplot as plt
 
 NFine = np.array([256, 256]) #,64
 NpFine = np.prod(NFine+1)
-Nepsilon = np.array([128, 128]) #,16
-NCoarse = np.array([32, 32]) #,8
-k=4
+Nepsilon = np.array([64, 64]) #,16
+NCoarse = np.array([16, 16]) #,8
+k=3
 NSamples = 100
 dim = np.size(NFine)
 
@@ -190,6 +186,10 @@ boundaryConditions = None #np.array([[0, 0], [0, 0]])
 alpha = 0.1
 beta = 1.
 p = 0.01
+left = np.array([0.25, 0.25])
+right = np.array([0.75, 0.75])
+percentage = 0.25  # p*((2*k-1)**dim) # for updates in HKM LOD
+#fix random seed!
 
 NCoarseElement = NFine // NCoarse
 world = World(NCoarse, NCoarseElement, boundaryConditions)
@@ -204,12 +204,12 @@ aRefList, KmsijList,muTPrimeList, timeBasis, timeMatrixList = computeCSI_offline
 print('time for setting up of checkerbboard basis {}'.format(timeBasis))
 print('average time for computation of stiffness matrix contribution {}'.format(np.mean(np.array(timeMatrixList))))
 print('variance in stiffness matrix timings {}'.format(np.var(np.array(timeMatrixList))))
-print('time for computation of HKM ref stiffness matrix {}'.format(timeMatrixList[0]))
+print('time for computation of HKM ref stiffness matrix {}'.format(timeMatrixList[-1]))
 print('total time for computation of ref stiffness matrices {}'.format(np.sum(np.array(timeMatrixList))))
 
-aRef = aRefList[0]
-KmsijRef = KmsijList[0]
-muTPrimeRef = muTPrimeList[0]
+aRef = np.copy(aRefList[-1])
+KmsijRef = np.copy(KmsijList[-1])
+muTPrimeRef = muTPrimeList[-1]
 
 mean_error_combined = 0.
 mean_error_perturbed = 0.
@@ -228,8 +228,8 @@ def computeKmsij(TInd, a, IPatch):
     return patch, correctorsList, csi.Kmsij, csi
 
 for N in range(NSamples):
-    aPert = build_randomcheckerboard(Nepsilon,NFine,alpha,beta,p)
-    #aPert = beta*np.ones(world.NtFine)
+    #aPert = build_coefficient.build_randomcheckerboard(Nepsilon,NFine,alpha,beta,p)
+    aPert = build_coefficient.build_inclusions_defect_2d(NFine, Nepsilon, alpha, beta, left, right, p)
 
     MFull = fem.assemblePatchMatrix(world.NWorldFine, world.MLocFine)
     basis = fem.assembleProlongationMatrix(world.NWorldCoarse, world.NCoarseElement)
@@ -274,8 +274,8 @@ for N in range(NSamples):
 
     uFEM[np.arange(NFine[0], NpFine - 1, NFine[0] + 1)] \
         += uFEM[np.arange(0, NFine[1] * (NFine[0] + 1), NFine[0] + 1)]
-    uFEM[np.arange(NFine[1] * (NFine[0] + 1), NpFine)] += uFEM[np.arange(NFine[0] + 1)]'''
-
+    uFEM[np.arange(NFine[1] * (NFine[0] + 1), NpFine)] += uFEM[np.arange(NFine[0] + 1)]
+    '''
 
     #true LOD
     if dim == 2:
@@ -291,6 +291,7 @@ for N in range(NSamples):
     toc = time.perf_counter()
     mean_time_true += (toc-tic)
 
+    bFull = basis.T * MFull * f
     uFulltrue, _ = pglod.solvePeriodic(world, KFulltrue, bFull, faverage, boundaryConditions)
     uLodCoarsetrue = basis * uFulltrue
 
@@ -299,6 +300,7 @@ for N in range(NSamples):
     KFullcomb, _ = compute_combined_MsStiffness(world,aPert,aRefList,KmsijList,muTPrimeList,k, compute_indicator=False)
     toc = time.perf_counter()
     mean_time_combined += (toc-tic)
+    bFull = basis.T * MFull * f
     uFullcomb, _ = pglod.solvePeriodic(world, KFullcomb, bFull, faverage, boundaryConditions)
     uLodCoarsecomb = basis * uFullcomb
 
@@ -308,11 +310,11 @@ for N in range(NSamples):
     mean_error_combined += error_combined
 
     #perturbedLOD
-    percentage = 0.2#p*((2*k-1)**dim)
     tic = time.perf_counter()
     KFullpert, _ = compute_perturbed_MsStiffness(world, aPert, aRef, KmsijRef, muTPrimeRef, k, percentage)
     toc = time.perf_counter()
     mean_time_perturbed += (toc-tic)
+    bFull = basis.T * MFull * f
     uFullpert, _ = pglod.solvePeriodic(world, KFullpert, bFull, faverage, boundaryConditions)
     uLodCoarsepert = basis * uFullpert
 
@@ -330,31 +332,49 @@ for N in range(NSamples):
     plt.bar(util.tCoordinates(world.NWorldCoarse).flatten(), np.array(error_indicator), width=0.03, color='r')
     plt.show()'''
 
-'''    fig = plt.figure()
-    ax1 = fig.add_subplot(1, 3, 1)
-    ax2 = fig.add_subplot(1, 3, 2)
-    ax3 = fig.add_subplot(1, 3, 3)
+    '''fig = plt.figure()
+    ax1 = fig.add_subplot(2, 2, 1)
+    ax2 = fig.add_subplot(2, 2, 2)
+    ax3 = fig.add_subplot(2, 2, 3)
+    ax4 = fig.add_subplot(2, 2, 4)
 
     uLodCoarse_pertGrid = uLodCoarsepert.reshape(world.NWorldFine+1, order='C')
-    uLodCoarseGrid = uLodCoarse.reshape(world.NWorldFine+1, order='C')
-    uFineGrid = uFEM.reshape(world.NWorldFine+1, order='C')
+    uLodCoarse_trueGrid = uLodCoarsetrue.reshape(world.NWorldFine+1, order='C')
+    uLodCoarse_combGrid = uLodCoarsecomb.reshape(world.NWorldFine+1, order='C')
+    uFEM_Grid = uFEM.reshape(world.NWorldFine+1, order='C')
 
-    im3 = ax3.imshow(uFineGrid, origin='lower_left',\
+    im4 = ax4.imshow(uLodCoarse_combGrid, origin='lower_left',\
                      extent=(xpFine[:, 0].min(), xpFine[:, 0].max(), xpFine[:, 1].min(), xpFine[:, 1].max()), cmap=plt.cm.hot)
+    fig.colorbar(im4, ax=ax4)
+
+    im2 = ax2.imshow(uLodCoarse_trueGrid, origin='lower_left',\
+                     extent=(xpFine[:, 0].min(), xpFine[:, 0].max(), xpFine[:, 1].min(), xpFine[:, 1].max()), cmap=plt.cm.hot)
+    fig.colorbar(im2, ax=ax2)
+
+    im3 = ax3.imshow(uLodCoarse_pertGrid, origin='lower_left',\
+                     extent=(xpFine[:,0].min(), xpFine[:,0].max(), xpFine[:,1].min(), xpFine[:,1].max()), cmap=plt.cm.hot)
     fig.colorbar(im3, ax=ax3)
 
-    im1 = ax1.imshow(uLodCoarse_pertGrid, origin='lower_left',\
-                     extent=(xpFine[:, 0].min(), xpFine[:, 0].max(), xpFine[:, 1].min(), xpFine[:, 1].max()), cmap=plt.cm.hot)
-    fig.colorbar(im1, ax=ax1)
-
-    im2 = ax2.imshow(uLodCoarseGrid, origin='lower_left',\
+    im1 = ax1.imshow(uFEM_Grid, origin='lower_left',
                      extent=(xpFine[:,0].min(), xpFine[:,0].max(), xpFine[:,1].min(), xpFine[:,1].max()), cmap=plt.cm.hot)
-    fig.colorbar(im2, ax=ax2)
+    fig.colorbar(im1, ax=ax1)
 
     #im3 = ax3.imshow(aPertgrid, origin= 'lower_left',\
     #                 extent=(xp[:, 0].min(), xp[:, 0].max(), xp[:, 1].min(), xp[:, 1].max()), cmap=plt.cm.hot)
     #fig.colorbar(im6, ax=ax6)
-    plt.show()'''
+    plt.show()
+
+    #errors to FEM
+    L2normFEM = np.sqrt(np.dot(uFEM, MFull * uFEM))
+    error_FEM_combined = np.sqrt(
+        np.dot(uFEM - uLodCoarsecomb, MFull * (uFEM - uLodCoarsecomb))) / L2normFEM
+    print("L2-error to FEM in {}th sample for new LOD is: {}".format(N, error_FEM_combined))
+
+    error_FEM_pert = np.sqrt(np.dot(uFEM - uLodCoarsepert, MFull * (uFEM - uLodCoarsepert))) / L2normFEM
+    print("L2-error to FEM in {}th sample for HKM LOD is: {}".format(N, error_FEM_pert))
+
+    error_FEM_true = np.sqrt(np.dot(uFEM - uLodCoarsetrue, MFull * (uFEM - uLodCoarsetrue))) / L2normFEM
+    print("L2-error to FEM in {}th sample for true LOD is: {}".format(N, error_FEM_true))'''
 
 mean_error_combined /= NSamples
 mean_error_perturbed /= NSamples
