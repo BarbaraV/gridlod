@@ -6,7 +6,8 @@ def build_randomcheckerboard(Nepsilon, NFine, alpha, beta, p):
     # piece-wise constant on mesh with Nepsilon blocks
     # returns a fine coefficient on mesh with NFine blocks
     Ntepsilon = np.prod(Nepsilon)
-    c = np.random.binomial(1,p,Ntepsilon)#np.random.randint(0,2,Ntepsilon)
+    c = np.random.binomial(1,p,Ntepsilon)
+    #c1 = np.random.rand(Ntepsilon)
     values = alpha + (beta-alpha) * c
 
     def randomcheckerboard(x):
@@ -55,22 +56,26 @@ def build_inclusions_defect_2d(NFine, Nepsilon, bg, val, incl_bl, incl_tr, p_def
     # builds a fine coefficient which is periodic with periodicity length 1/epsilon.
     # On the unit cell, the coefficient takes the value val inside a rectangle described by  incl_bl (bottom left) and
     # incl_tr (top right), otherwise the value is bg
-    # additionally, a percentage of p_defect inclusions is deleted by setting the value to bg
+    # with a probability of p_defect the inclusion 'vanishes', i.e. the value is set to bg
 
     assert(np.all(incl_bl) >= 0.)
     assert(np.all(incl_tr) <= 1.)
     assert(p_defect < 1.)
 
-    N_defect = int(p_defect*np.prod(Nepsilon))
-    defect_indices = np.random.choice(np.prod(Nepsilon), N_defect, replace=False)
+    #include fixed percentage of defects
+    #N_defect = int(p_defect*np.prod(Nepsilon))
+    #defect_indices = np.random.choice(np.prod(Nepsilon), N_defect, replace=False)
     #c = np.zeros(np.prod(Nepsilon))
     #c[defect_indices] = 1.
 
+    #probability of defect is p_defect
+    c = np.random.binomial(1, p_defect, np.prod(Nepsilon))
+
     aBaseSquare = bg*np.ones(NFine)
-    flatidx = 0.
+    flatidx = 0
     for ii in range(Nepsilon[0]):
         for jj in range(Nepsilon[1]):
-            if not flatidx in defect_indices:
+            if c[flatidx] == 0: #not flatidx in defect_indices:
                 startindexcols = int((ii + incl_bl[0]) * (NFine/Nepsilon)[0])
                 stopindexcols = int((ii + incl_tr[0]) * (NFine/Nepsilon)[0])
                 startindexrows = int((jj + incl_bl[1]) * (NFine/Nepsilon)[1])
