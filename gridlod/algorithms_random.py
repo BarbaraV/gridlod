@@ -125,8 +125,8 @@ def compute_perturbed_MsStiffness(world,aPert, aRef, KmsijRef, muTPrimeRef,k, up
         for (i, eps) in E.items():
             if eps > tol:
                 Elements_to_be_updated.append(i)
-        if len(E) > 0:
-            print('... to be updated: {}%'.format(100 * np.size(Elements_to_be_updated) / len(E)), end='\n', flush=True)
+        #if len(E) > 0:
+            #print('... to be updated: {}%'.format(100 * np.size(Elements_to_be_updated) / len(E)), end='\n', flush=True)
 
         if np.size(Elements_to_be_updated) != 0:
             #print('... update correctors')
@@ -146,8 +146,8 @@ def compute_perturbed_MsStiffness(world,aPert, aRef, KmsijRef, muTPrimeRef,k, up
 
     #print('computing error indicators', end='', flush=True)
     E_vh = list(map(computeIndicator, range(world.NtCoarse)))
-    print()
-    print('maximal value error estimator {}'.format(np.max(E_vh)))
+    #print()
+    #print('maximal value error estimator {}'.format(np.max(E_vh)))
     E = {i: E_vh[i] for i in range(np.size(E_vh)) if E_vh[i] > 0}
 
     # loop over elements with possible recomputation of correctors

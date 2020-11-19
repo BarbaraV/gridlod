@@ -1,4 +1,5 @@
 import numpy as np
+import scipy.io as sio
 
 from gridlod.world import World, PatchPeriodic
 from gridlod import util, fem, coef, lod, pglod, interp, build_coefficient
@@ -28,11 +29,17 @@ xpFine = util.pCoordinates(NFine)
 ffunc = lambda x: 8*np.pi**2*np.sin(2*np.pi*x[:,0])*np.cos(2*np.pi*x[:,1])
 f = ffunc(xpFine).flatten()
 
-aRefList, KmsijList,muTPrimeList, _, _ = computeCSI_offline(world, Nepsilon // NCoarse,
+aRefList, KmsijList,muTPrimeList, timeBasis, timeMatrixList = computeCSI_offline(world, Nepsilon // NCoarse,
                                                                                  alpha, beta, k, boundaryConditions, 'check')
 aRef = np.copy(aRefList[-1])
 KmsijRef = np.copy(KmsijList[-1])
 muTPrimeRef = muTPrimeList[-1]
+
+print('time for setting up of checkerbboard basis {}'.format(timeBasis))
+print('average time for computation of stiffness matrix contribution {}'.format(np.mean(np.array(timeMatrixList))))
+print('variance in stiffness matrix timings {}'.format(np.var(np.array(timeMatrixList))))
+print('time for computation of HKM ref stiffness matrix {}'.format(timeMatrixList[-1]))
+print('total time for computation of ref stiffness matrices {}'.format(np.sum(np.array(timeMatrixList))))
 
 mean_error_combined = np.zeros(len(pList))
 mean_error_perturbed = np.zeros(len(pList))
@@ -102,16 +109,22 @@ for p in pList:
     mean_error_combined[ii] /= NSamples
     mean_error_perturbed[ii] /= NSamples
     print("mean L2-error for new LOD over {} samples for p={} is: {}".format(NSamples, p, mean_error_combined[ii]))
-    print("mean L2-error for new LOD over {} samples for p={} is: {}".format(NSamples, p, mean_error_perturbed[ii]))
+    print("mean L2-error for perturbed LOD over {} samples for p={} is: {}".format(NSamples, p, mean_error_perturbed[ii]))
     ii += 1
 
-plt.figure()
-plt.plot(pList, mean_error_combined, '*', label='new')
-plt.plot(pList, mean_error_perturbed, '*', label='pert.')
-plt.legend()
+    if p == 0.1:
+        sio.savemat('_relErr.mat', {'relErrHKM': error_samp_hkm, 'relErrNew': error_samp_new, 'iiSamp': np.arange(NSamples)})
 
-plt.figure()
-plt.plot(np.arange(NSamples), error_samp_new, label='new')
-plt.plot(np.arange(NSamples), error_samp_hkm, label='pert.')
-plt.legend()
-plt.show()
+print("mean error combined {}".format(mean_error_combined))
+print("mean error perturbed {}".format(mean_error_perturbed))
+
+#plt.figure()
+#plt.plot(pList, mean_error_combined, '*', label='new')
+#plt.plot(pList, mean_error_perturbed, '*', label='pert.')
+#plt.legend()
+
+#plt.figure()
+#plt.plot(np.arange(NSamples), error_samp_new, label='new')
+#plt.plot(np.arange(NSamples), error_samp_hkm, label='pert.')
+#plt.legend()
+#plt.show()
