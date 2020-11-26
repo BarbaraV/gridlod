@@ -62,8 +62,8 @@ def computeAharm_error(aHarmList, aPert):
     return np.max(error_harmList)
 
 
-for N in NList:
-    NCoarse = np.array([N])
+for Nc in NList:
+    NCoarse = np.array([Nc])
     NCoarseElement = NFine // NCoarse
     world = World(NCoarse, NCoarseElement, boundaryConditions)
 
@@ -123,7 +123,7 @@ for N in NList:
 
     print(mean_error_combined)
     print(mean_harm_error)
-    sio.savemat('_meanErr_Nc'+str(N)+'.mat',
+    sio.savemat('_meanErr_Nc'+str(Nc)+'.mat',
                 {'meanErr_comb': mean_error_combined, 'meanHarmErr': mean_harm_error, 'pList': pList})
 
 #plt.plot(pList, mean_error_combined, '*')
