@@ -12,7 +12,7 @@ NpFine = np.prod(NFine+1)
 Nepsilon = np.array([64,64])
 NCoarse = np.array([16,16])
 k=3
-NSamples = 1#350
+NSamples = 350
 dim = np.size(NFine)
 
 boundaryConditions = None
@@ -21,7 +21,7 @@ beta = 10.
 left = np.array([0.25, 0.25])
 right = np.array([0.75, 0.75])
 pList = [0.01, 0.05, 0.1, 0.15]
-def_values = [alpha, 0.5, 5., 15.]
+def_values = [alpha, 0.5, 5.]
 #percentage_comp = 0.6
 np.random.seed(123)
 
