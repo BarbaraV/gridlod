@@ -18,8 +18,7 @@ dim = np.size(NFine)
 boundaryConditions = None
 alpha = 0.1
 beta = 1.
-pList = [0.1]#[0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09, 0.1, 0.15]
-#percentage = np.zeros(len(pList))  #no updates in HKM
+pList = [0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09, 0.1]
 percentage_comp = 0.6
 np.random.seed(123)
 
@@ -164,13 +163,5 @@ for p in pList:
 print("mean error combined {}".format(mean_error_combined))
 print("mean error perturbed {}".format(mean_error_perturbed))
 
-#plt.figure()
-#plt.plot(pList, mean_error_combined, '*', label='new')
-#plt.plot(pList, mean_error_perturbed, '*', label='pert.')
-#plt.legend()
-
-#plt.figure()
-#plt.plot(np.arange(NSamples), error_samp_new, label='new')
-#plt.plot(np.arange(NSamples), error_samp_hkm, label='pert.')
-#plt.legend()
-#plt.show()
+sio.savemat('_meanErr2d.mat',
+                {'relerrL2new': mean_error_combined, 'relerrL2pert': mean_error_perturbed, 'pList': pList})

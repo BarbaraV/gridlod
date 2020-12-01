@@ -52,15 +52,18 @@ def build_checkerboardbasis(NPatch, NepsilonElement, NFineElement, alpha, beta):
 
     return checkerboardbasis
 
-def build_inclusions_defect_2d(NFine, Nepsilon, bg, val, incl_bl, incl_tr, p_defect):
+def build_inclusions_defect_2d(NFine, Nepsilon, bg, val, incl_bl, incl_tr, p_defect, def_val=None):
     # builds a fine coefficient which is periodic with periodicity length 1/epsilon.
     # On the unit cell, the coefficient takes the value val inside a rectangle described by  incl_bl (bottom left) and
     # incl_tr (top right), otherwise the value is bg
-    # with a probability of p_defect the inclusion 'vanishes', i.e. the value is set to bg
+    # with a probability of p_defect the inclusion 'vanishes', i.e. the value is set to def_val (default: bg)
 
     assert(np.all(incl_bl) >= 0.)
     assert(np.all(incl_tr) <= 1.)
     assert(p_defect < 1.)
+
+    if def_val is None:
+        def_val = bg
 
     #include fixed percentage of defects
     #N_defect = int(p_defect*np.prod(Nepsilon))
@@ -75,12 +78,14 @@ def build_inclusions_defect_2d(NFine, Nepsilon, bg, val, incl_bl, incl_tr, p_def
     flatidx = 0
     for ii in range(Nepsilon[0]):
         for jj in range(Nepsilon[1]):
+            startindexcols = int((ii + incl_bl[0]) * (NFine/Nepsilon)[0])
+            stopindexcols = int((ii + incl_tr[0]) * (NFine/Nepsilon)[0])
+            startindexrows = int((jj + incl_bl[1]) * (NFine/Nepsilon)[1])
+            stopindexrows = int((jj + incl_tr[1]) * (NFine/Nepsilon)[1])
             if c[flatidx] == 0: #not flatidx in defect_indices:
-                startindexcols = int((ii + incl_bl[0]) * (NFine/Nepsilon)[0])
-                stopindexcols = int((ii + incl_tr[0]) * (NFine/Nepsilon)[0])
-                startindexrows = int((jj + incl_bl[1]) * (NFine/Nepsilon)[1])
-                stopindexrows = int((jj + incl_tr[1]) * (NFine/Nepsilon)[1])
                 aBaseSquare[startindexrows:stopindexrows, startindexcols:stopindexcols] = val
+            else:
+                aBaseSquare[startindexrows:stopindexrows, startindexcols:stopindexcols] = def_val
             flatidx += 1
 
     return aBaseSquare.flatten()

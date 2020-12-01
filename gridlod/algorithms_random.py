@@ -6,7 +6,7 @@ from gridlod import multiplecoeff, coef, interp, lod, pglod, build_coefficient
 from gridlod.world import PatchPeriodic
 
 
-def computeCSI_offline(world, NepsilonElement, alpha, beta, k, boundaryConditions, model):
+def computeCSI_offline(world, NepsilonElement, alpha, beta, k, boundaryConditions, model, left=None, right=None):
     dim = np.size(world.NWorldFine)
     if dim == 2:
         middle = world.NWorldCoarse[1] // 2 * world.NWorldCoarse[0] + world.NWorldCoarse[0] // 2
@@ -19,6 +19,7 @@ def computeCSI_offline(world, NepsilonElement, alpha, beta, k, boundaryCondition
     if model == 'check':
         aRefList = build_coefficient.build_checkerboardbasis(patch.NPatchCoarse, NepsilonElement, world.NCoarseElement, alpha, beta)
     else:
+        assert(left is not None and right is not None)
         aRefList = build_coefficient.build_inclusionbasis_2d(patch.NPatchCoarse,NepsilonElement, world.NCoarseElement, alpha, beta, left, right)
     toc = time.perf_counter()
     time_basis = toc-tic
@@ -68,6 +69,8 @@ def compute_combined_MsStiffness(world,Nepsilon,aPert,aRefList, KmsijList,muTPri
             alphaT[len(alphaT)-1] = 1.-np.sum(alphaT[:len(alphaT)-1])
         else:
             alphaT = np.zeros(len(aRefList))
+            alpha = np.min(aRefList[-1])
+            beta = np.max(aRefList[-1])
             NFineperEpsilon = world.NWorldFine // Nepsilon
             NEpsilonperPatchCoarse = patchT[TInd].NPatchCoarse * (Nepsilon // world.NWorldCoarse)
             tmp_indx = np.array([np.arange(len(aRefList) - 1) // NEpsilonperPatchCoarse[0]+0.5,
