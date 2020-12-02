@@ -4,7 +4,6 @@ import scipy.io as sio
 from gridlod.world import World, PatchPeriodic
 from gridlod import util, fem, coef, lod, pglod, interp, build_coefficient
 from gridlod.algorithms_random import computeCSI_offline, compute_combined_MsStiffness
-import matplotlib.pyplot as plt
 
 NFine = np.array([256])
 NpFine = np.prod(NFine+1)
@@ -19,6 +18,7 @@ alpha = 0.1
 beta = 1.
 pList = [0.01, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5]
 np.random.seed(123)
+model ={'name': 'check', 'alpha': alpha, 'beta': beta}
 
 def computeKmsij(TInd, a, IPatch):
     #print('.', end='', flush=True)
@@ -37,7 +37,7 @@ def computeAharm(TInd,a):
     return world.NWorldFine/(world.NWorldCoarse * aPatchHarm)
 
 def computeAharm_offline():
-    aRefListSingle,_,_,_,_ = computeCSI_offline(world, Nepsilon//NCoarse,alpha,beta,0,boundaryConditions,'check')
+    aRefListSingle,_,_,_,_ = computeCSI_offline(world, Nepsilon//NCoarse,0,boundaryConditions,model)
     return [world.NWorldFine/(world.NWorldCoarse * np.sum(1./aRefSingle)) for aRefSingle in aRefListSingle]
 
 def computeAharm_error(aHarmList, aPert):
@@ -71,8 +71,7 @@ for Nc in NList:
     ffunc = lambda x: 8 * np.pi ** 2 * np.sin(2 * np.pi * x)
     f = ffunc(xpFine).flatten()
 
-    aRefList, KmsijList, muTPrimeList, _, _ = computeCSI_offline(world, Nepsilon // NCoarse,
-                                                                 alpha, beta, k, boundaryConditions, 'check')
+    aRefList, KmsijList, muTPrimeList, _, _ = computeCSI_offline(world, Nepsilon // NCoarse, k, boundaryConditions,model)
 
     mean_error_combined = np.zeros(len(pList))
 
@@ -102,7 +101,7 @@ for Nc in NList:
             uLodCoarsetrue = basis * uFulltrue
 
             #combined LOD
-            KFullcomb, _ = compute_combined_MsStiffness(world,Nepsilon,aPert,aRefList,KmsijList,muTPrimeList,k,'check',
+            KFullcomb, _ = compute_combined_MsStiffness(world,Nepsilon,aPert,aRefList,KmsijList,muTPrimeList,k,model,
                                                                           compute_indicator=False)
             bFull = basis.T * MFull * f
             uFullcomb, _ = pglod.solvePeriodic(world, KFullcomb, bFull, faverage, boundaryConditions)

@@ -6,7 +6,7 @@ from gridlod import multiplecoeff, coef, interp, lod, pglod, build_coefficient
 from gridlod.world import PatchPeriodic
 
 
-def computeCSI_offline(world, NepsilonElement, alpha, beta, k, boundaryConditions, model, left=None, right=None):
+def computeCSI_offline(world, NepsilonElement, k, boundaryConditions, model):
     dim = np.size(world.NWorldFine)
     if dim == 2:
         middle = world.NWorldCoarse[1] // 2 * world.NWorldCoarse[0] + world.NWorldCoarse[0] // 2
@@ -15,12 +15,18 @@ def computeCSI_offline(world, NepsilonElement, alpha, beta, k, boundaryCondition
     patch = PatchPeriodic(world, k, middle)
 
     tic = time.perf_counter()
-    assert(model == 'check' or model == 'incl')
-    if model == 'check':
-        aRefList = build_coefficient.build_checkerboardbasis(patch.NPatchCoarse, NepsilonElement, world.NCoarseElement, alpha, beta)
-    else:
-        assert(left is not None and right is not None)
-        aRefList = build_coefficient.build_inclusionbasis_2d(patch.NPatchCoarse,NepsilonElement, world.NCoarseElement, alpha, beta, left, right)
+    assert(model['name'] in ['check', 'incl', 'inclvalue'])
+    if model['name'] == 'check':
+        aRefList = build_coefficient.build_checkerboardbasis(patch.NPatchCoarse, NepsilonElement,
+                                                             world.NCoarseElement, model['alpha'], model['beta'])
+    elif model['name'] == 'incl':
+        aRefList = build_coefficient.build_inclusionbasis_2d(patch.NPatchCoarse,NepsilonElement, world.NCoarseElement,
+                                                             model['bgval'], model['inclval'], model['left'], model['right'])
+    elif model['name'] == 'inclvalue':
+        aRefList = build_coefficient.build_inclusionbasis_2d(patch.NPatchCoarse, NepsilonElement, world.NCoarseElement,
+                                                             model['bgval'], model['inclval'], model['left'],
+                                                             model['right'], model['defval'])
+
     toc = time.perf_counter()
     time_basis = toc-tic
 
@@ -51,34 +57,50 @@ def compute_combined_MsStiffness(world,Nepsilon,aPert,aRefList, KmsijList,muTPri
         rPatch = lambda: coef.localizeCoefficient(patchT[TInd], aPert, periodic=True)
 
         #direct determination of alpha without optimization
-        assert (model == 'check' or model == 'incl')
+        assert (model['name'] in ['check', 'incl', 'inclvalue'])
 
-        if model == 'check':
+        if model['name'] == 'check':
             alphaT = np.zeros(len(aRefList))
-            alphaScaled = np.min(aRefList[1])
-            betaScaled = np.max(aRefList[1])
+            alpha = model['alpha']
+            beta = model['beta']
             NFineperEpsilon = world.NWorldFine//Nepsilon
             NEpsilonperPatchCoarse = patchT[TInd].NPatchCoarse*(Nepsilon//world.NWorldCoarse)
             if dim == 2:
                 tmp_indx =np.array([np.arange(len(aRefList)-1)//NEpsilonperPatchCoarse[0],
                                     np.arange(len(aRefList)-1)%NEpsilonperPatchCoarse[0]])
                 indx = tmp_indx[0]*NFineperEpsilon[1]*patchT[TInd].NPatchFine[0]+ tmp_indx[1]*NFineperEpsilon[0]
-                alphaT[:len(alphaT)-1] = (rPatch()[indx]-alphaScaled)/(betaScaled-alphaScaled)
+                alphaT[:len(alphaT)-1] = (rPatch()[indx]-alpha)/(beta-alpha)
             elif dim == 1:
-                alphaT[:len(alphaT)-1] = (rPatch()[np.arange(len(aRefList)-1)*np.prod(NFineperEpsilon)]-alphaScaled)/(betaScaled-alphaScaled)
+                alphaT[:len(alphaT)-1] = (rPatch()[np.arange(len(aRefList)-1)*np.prod(NFineperEpsilon)]-alpha)/(beta-alpha)
             alphaT[len(alphaT)-1] = 1.-np.sum(alphaT[:len(alphaT)-1])
-        else:
+        elif model['name'] == 'incl':
             alphaT = np.zeros(len(aRefList))
-            alpha = np.min(aRefList[-1])
-            beta = np.max(aRefList[-1])
+            bgval = model['bgval']
+            inclval = model['inclval']
+            blx = model['left'][0]
+            bly = model['left'][1]
             NFineperEpsilon = world.NWorldFine // Nepsilon
             NEpsilonperPatchCoarse = patchT[TInd].NPatchCoarse * (Nepsilon // world.NWorldCoarse)
-            tmp_indx = np.array([np.arange(len(aRefList) - 1) // NEpsilonperPatchCoarse[0]+0.5,
-                                 np.arange(len(aRefList) - 1) % NEpsilonperPatchCoarse[0] + 0.5])
+            tmp_indx = np.array([np.arange(len(aRefList) - 1) // NEpsilonperPatchCoarse[0]+blx,
+                                 np.arange(len(aRefList) - 1) % NEpsilonperPatchCoarse[0] + bly])
             indx = (tmp_indx[0] * NFineperEpsilon[1] * patchT[TInd].NPatchFine[0]).astype(int) \
                     + (tmp_indx[1] * NFineperEpsilon[0]).astype(int)
-            alphaT[:len(alphaT)-1] = (beta - rPatch()[indx])/(beta-alpha)
+            alphaT[:len(alphaT)-1] = (inclval - rPatch()[indx])/(inclval-bgval)
             alphaT[len(alphaT)-1] = 1. - np.sum(alphaT[:len(alphaT)-1])
+        elif model['name'] == 'inclvalue':
+            alphaT = np.zeros(len(aRefList))
+            defval = model['defval']
+            inclval = model['inclval']
+            blx = model['left'][0]
+            bly = model['left'][1]
+            NFineperEpsilon = world.NWorldFine // Nepsilon
+            NEpsilonperPatchCoarse = patchT[TInd].NPatchCoarse * (Nepsilon // world.NWorldCoarse)
+            tmp_indx = np.array([np.arange(len(aRefList) - 1) // NEpsilonperPatchCoarse[0] + blx,
+                                 np.arange(len(aRefList) - 1) % NEpsilonperPatchCoarse[0] + bly])
+            indx = (tmp_indx[0] * NFineperEpsilon[1] * patchT[TInd].NPatchFine[0]).astype(int) \
+                   + (tmp_indx[1] * NFineperEpsilon[0]).astype(int)
+            alphaT[:len(alphaT) - 1] = (inclval - rPatch()[indx]) / (inclval - defval)
+            alphaT[len(alphaT) - 1] = 1. - np.sum(alphaT[:len(alphaT) - 1])
 
         if compute_indicator:
             indicatorT = multiplecoeff.estimatorAlphaTildeA1mod(patchT[TInd],muTPrimeList,aRefList,rPatch,alphaT)

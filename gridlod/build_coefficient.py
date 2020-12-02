@@ -90,9 +90,11 @@ def build_inclusions_defect_2d(NFine, Nepsilon, bg, val, incl_bl, incl_tr, p_def
 
     return aBaseSquare.flatten()
 
-def build_inclusionbasis_2d(NPatch, NEpsilonElement, NFineElement, bg, val, incl_bl, incl_tr):
+def build_inclusionbasis_2d(NPatch, NEpsilonElement, NFineElement, bg, val, incl_bl, incl_tr, defval=None):
     Nepsilon = NPatch * NEpsilonElement
     NFine = NPatch * NFineElement
+    if defval is None:
+        defval = bg
 
     assert (np.all(incl_bl) >= 0.)
     assert (np.all(incl_tr) <= 1.)
@@ -115,7 +117,7 @@ def build_inclusionbasis_2d(NPatch, NEpsilonElement, NFineElement, bg, val, incl
         stopindexcols = int((tmp_indx[0] + incl_tr[0]) * (NFine / Nepsilon)[0])
         startindexrows = int((tmp_indx[1] + incl_bl[1]) * (NFine / Nepsilon)[1])
         stopindexrows = int((tmp_indx[1] + incl_tr[1]) * (NFine / Nepsilon)[1])
-        aSquare[startindexrows:stopindexrows, startindexcols:stopindexcols] = bg
+        aSquare[startindexrows:stopindexrows, startindexcols:stopindexcols] = defval
         return aSquare.flatten()
 
     coeffList = list(map(inclusion_defectI, range(np.prod(Nepsilon))))
