@@ -121,14 +121,17 @@ def compute_combined_MsStiffness(world,Nepsilon,aPert,aRefList, KmsijList,muTPri
             alphaT = np.zeros(len(aRefList))
             bgval = model['bgval']
             inclval = model['inclval']
-            blx = model['def_bl'][0]
-            bly = model['def_bl'][1]
             NFineperEpsilon = world.NWorldFine // Nepsilon
             NEpsilonperPatchCoarse = patchT[TInd].NPatchCoarse * (Nepsilon // world.NWorldCoarse)
+            assert(model['def_bl'][0] < model['left'][0] or model['def_bl'][1]<model['left'][1]
+                   or model['def_bl'][0] >= model['right'][0] or model['def_bl'][1]>=model['right'][1])
+            # other cases not yet implemented
+            blx = model['def_bl'][0]
+            bly = model['def_bl'][1]
             tmp_indx = np.array([np.arange(len(aRefList) - 1) // NEpsilonperPatchCoarse[0]+blx,
-                                 np.arange(len(aRefList) - 1) % NEpsilonperPatchCoarse[0] + bly])
+                             np.arange(len(aRefList) - 1) % NEpsilonperPatchCoarse[0] + bly])
             indx = (tmp_indx[0] * NFineperEpsilon[1] * patchT[TInd].NPatchFine[0]).astype(int) \
-                    + (tmp_indx[1] * NFineperEpsilon[0]).astype(int)
+                + (tmp_indx[1] * NFineperEpsilon[0]).astype(int)
             alphaT[:len(alphaT)-1] = (bgval - rPatch()[indx])/(bgval-inclval)
             alphaT[len(alphaT)-1] = 1. - np.sum(alphaT[:len(alphaT)-1])
         elif model['name'] == 'inclLshape':

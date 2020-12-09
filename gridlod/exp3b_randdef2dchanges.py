@@ -21,7 +21,7 @@ right = np.array([0.75, 0.75])
 pList = [0.01, 0.05, 0.1, 0.15]
 modelfill = {'name': 'inclfill', 'bgval': alpha, 'inclval': beta, 'left': left, 'right': right}
 modelshift = {'name': 'inclshift', 'bgval': alpha, 'inclval': beta, 'left': left, 'right': right,
-              'def_bl': np.array([0.5, 0.5]), 'def_tr': np.array([1., 1.])}
+              'def_bl': np.array([0., 0.]), 'def_tr': np.array([0.5, 0.5])}
 modelLshape = {'name': 'inclLshape', 'bgval': alpha, 'inclval': beta, 'left': left, 'right': right,
               'def_bl': np.array([0.5, 0.5]), 'def_tr': np.array([0.75, 0.75])}
 modelList = [modelshift]#[modelfill, modelshift, modelLshape]
