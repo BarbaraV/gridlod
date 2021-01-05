@@ -6,7 +6,7 @@ from gridlod import multiplecoeff, coef, interp, lod, pglod, build_coefficient
 from gridlod.world import PatchPeriodic
 
 
-def computeCSI_offline(world, NepsilonElement, k, boundaryConditions, model):
+def computeCSI_offline(world, NepsilonElement, k, boundaryConditions, model, correctors=False):
     dim = np.size(world.NWorldFine)
     if dim == 2:
         middle = world.NWorldCoarse[1] // 2 * world.NWorldCoarse[0] + world.NWorldCoarse[0] // 2
@@ -47,11 +47,15 @@ def computeCSI_offline(world, NepsilonElement, k, boundaryConditions, model):
         return patch, correctorsList, csi.Kmsij, csi.muTPrime, toc-tic
 
     computeSingleKms = lambda aRef: computeKmsij(middle, aRef, k, boundaryConditions)
-    _, _, KmsijList, muTPrimeList, timeMatrixList = zip(*map(computeSingleKms, aRefList))
+    if correctors:
+        _, correctorsList, KmsijList, muTPrimeList, timeMatrixList = zip(*map(computeSingleKms, aRefList))
+        return aRefList, KmsijList, muTPrimeList, time_basis, timeMatrixList, correctorsList
+    else:
+        _, _, KmsijList, muTPrimeList, timeMatrixList = zip(*map(computeSingleKms, aRefList))
+        return aRefList, KmsijList, muTPrimeList, time_basis, timeMatrixList
 
-    return aRefList, KmsijList, muTPrimeList, time_basis, timeMatrixList
-
-def compute_combined_MsStiffness(world,Nepsilon,aPert,aRefList, KmsijList,muTPrimeList,k,model,compute_indicator=False):
+def compute_combined_MsStiffness(world,Nepsilon,aPert,aRefList, KmsijList,muTPrimeList,k,model,compute_indicator=False,
+                                 correctorsList=None):
     computePatch = lambda TInd: PatchPeriodic(world, k, TInd)
     patchT = list(map(computePatch, range(world.NtCoarse)))
     dim = np.size(world.NWorldFine)
@@ -150,7 +154,9 @@ def compute_combined_MsStiffness(world,Nepsilon,aPert,aRefList, KmsijList,muTPri
             alphaT[len(alphaT)-1] = 1. - np.sum(alphaT[:len(alphaT)-1])
 
         if compute_indicator:
-            indicatorT = multiplecoeff.estimatorAlphaTildeA1mod(patchT[TInd],muTPrimeList,aRefList,rPatch,alphaT)
+            #indicatorT = multiplecoeff.estimatorAlphaTildeA1mod(patchT[TInd],muTPrimeList,aRefList,rPatch,alphaT)
+            assert(correctorsList is not None)
+            indicatorT = multiplecoeff.computeErrorIndicatorFineMultiple(patchT[TInd],correctorsList,aRefList,alphaT)
         else:
             indicatorT = None
 
