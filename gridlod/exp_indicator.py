@@ -131,7 +131,7 @@ NpFine = np.prod(NFine+1)
 Nepsilon = np.array([128,128])
 NList = [32]
 k=4
-NSamples = 20
+NSamples = 2000
 dim = np.size(NFine)
 
 xpFine = util.pCoordinates(NFine)
@@ -171,7 +171,7 @@ for Nc in NList:
         ETListloc.append(ET)
         defectsList.append(defects)
 
-        aPert = build_coefficient.build_randomcheckerboard(Nepsilon, NFine, alpha, beta, p)
+        '''aPert = build_coefficient.build_randomcheckerboard(Nepsilon, NFine, alpha, beta, p)
 
         MFull = fem.assemblePatchMatrix(world.NWorldFine, world.MLocFine)
         basis = fem.assembleProlongationMatrix(world.NWorldCoarse, world.NCoarseElement)
@@ -202,7 +202,7 @@ for Nc in NList:
         error_combinedList.append(error_combined)
         print("L2-error in {}th sample for new LOD is: {}".format(N, error_combined))
         print("maximal error indicator in {}th sample for new LOD is: {}".format(N, max(ETs)))
-        # print("efficiency index indicator/error in {}th sample is {}".format(N, max(ETs)/error_combined))
+        # print("efficiency index indicator/error in {}th sample is {}".format(N, max(ETs)/error_combined))'''
 
     #print('maximal ET {}'.format(max(ETList)))
 
@@ -211,19 +211,22 @@ for Nc in NList:
     #ETone = computeErrorIndicatorFineMultiple(patchRef, correctorsList, aRefList, mu)
     #print("ET with all defects {}".format((ETone)))
 
-    samplemax = [np.max(np.array(ETListloc)[:(ii + 1)]) for ii in range(NSamples)]
-    samplemean = [np.nanmean(np.array(ETList)[:(ii + 1)]) for ii in range(NSamples)]
-    samplemeanloc = [np.mean(samplemax[:(ii + 1)]) for ii in range(NSamples)]
-    samplemean_error = [np.mean(np.array(error_combinedList)[:(ii + 1)]) for ii in range(NSamples)]
-    plt.figure(1)
-    plt.scatter(defectsList, ETListloc)
-    plt.figure(2)
-    plt.plot(np.arange(NSamples), samplemax)
-    plt.figure(3)
-    plt.plot(np.arange(NSamples), samplemean)
-    plt.figure(4)
-    plt.plot(np.arange(NSamples), samplemean_error)
-    plt.show()
-    print("mean local maximal ET {}".format(samplemeanloc[-1]))
-    print("mean maximal ET {}".format(samplemean[-1]))
-    print("mean L2 error {}".format(samplemean_error[-1]))
+    #samplemax = [np.max(np.array(ETListloc)[:(ii + 1)]) for ii in range(NSamples)]
+    #samplemean = [np.nanmean(np.array(ETList)[:(ii + 1)]) for ii in range(NSamples)]
+    #samplemeanloc = [np.mean(samplemax[:(ii + 1)]) for ii in range(NSamples)]
+    #samplemean_error = [np.mean(np.array(error_combinedList)[:(ii + 1)]) for ii in range(NSamples)]
+    #plt.figure(1)
+    #plt.scatter(defectsList, ETListloc)
+    #plt.figure(2)
+    #plt.plot(np.arange(NSamples), samplemax)
+    #plt.figure(3)
+    #plt.plot(np.arange(NSamples), samplemean)
+    #plt.figure(4)
+    #plt.plot(np.arange(NSamples), samplemean_error)
+    #plt.show()
+    #print("mean local maximal ET {}".format(samplemeanloc[-1]))
+    #print("mean maximal ET {}".format(samplemean[-1]))
+    #print("mean L2 error {}".format(samplemean_error[-1]))
+
+    import scipy.io as sio
+    sio.savemat('_ErrIndicLoc2drandcheck.mat', {'ETListloc': ETListloc, 'defectsListloc': defectsList})
