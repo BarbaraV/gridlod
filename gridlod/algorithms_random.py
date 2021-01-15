@@ -156,7 +156,9 @@ def compute_combined_MsStiffness(world,Nepsilon,aPert,aRefList, KmsijList,muTPri
         if compute_indicator:
             #indicatorT = multiplecoeff.estimatorAlphaTildeA1mod(patchT[TInd],muTPrimeList,aRefList,rPatch,alphaT)
             assert(correctorsList is not None)
-            indicatorT = multiplecoeff.computeErrorIndicatorFineMultiple(patchT[TInd],correctorsList,aRefList,alphaT)
+            indicator = multiplecoeff.computeErrorIndicatorFineMultiple(patchT[TInd],correctorsList,aRefList,alphaT)
+            defects = np.sum(alphaT[:len(alphaT)-1])
+            indicatorT = [indicator,defects]
         else:
             indicatorT = None
 
