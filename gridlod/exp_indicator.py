@@ -46,12 +46,9 @@ patchRef = PatchPeriodic(world, k, middle)
 
 for p in pList:
     ETList = []
-    ETListmax = []
     ETListmiddle = []
     absErrorList = []
     relErrorList = []
-    matrixErrorList = []
-    defectsList = []
 
     for N in range(NSamples):
 
@@ -75,12 +72,9 @@ for p in pList:
         KFullcomb, indic = compute_combined_MsStiffness(world, Nepsilon, aPert, aRefList, KmsijList, muTPrimeList, k,
                                                       model,True,correctorsList)
         ETs = [indic[ii][0] for ii in range(len(indic))]
-        defects = indic[middle][1]
         ETs = np.array(ETs)
         ETList.append(ETs)
-        ETListmax.append(np.max(ETs))
-        ETListmax.append(ETs[middle])
-        defectsList.append(defects)
+        ETListmiddle.append(ETs[middle])
 
         bFull = basis.T * MFull * f
         uFullcomb, _ = pglod.solvePeriodic(world, KFullcomb, bFull, faverage, boundaryConditions)
@@ -91,14 +85,9 @@ for p in pList:
             np.dot(uLodCoarsetrue - uLodCoarsecomb, MFull * (uLodCoarsetrue - uLodCoarsecomb)))
         absErrorList.append(error_combined)
         relErrorList.append(error_combined/L2norm)
-        matrixError=np.linalg.norm((KFulltrue-KFullcomb).todense(),2)
-        matrixErrorList.append(matrixError)
 
     print("mean relative L2-error for p = {} is: {}".format(p, np.mean(relErrorList)))
-    print("mean constistency (matrix) error for p = {} is: {}".format(p, np.mean(matrixErrorList)))
-    print("mean maximal error indicator for p = {} is: {}".format(p, np.mean(ETListmax)))
+    print("mean error indicator element for p = {} is: {}".format(p, np.mean(ETListmiddle)))
 
-    sio.savemat('_ErrIndic2drandcheck_p'+str(p)+'.mat', {'ETListloc': ETList, 'ETListmax': ETListmax,
-                                                             'ETListmiddle': ETListmiddle,'defectsList': defectsList,
-                                                             'absError': absErrorList, 'relError': relErrorList,
-                                                             'matrixError': matrixErrorList})
+    sio.savemat('_ErrIndic2drandcheck_p'+str(p)+'.mat', {'ETListloc': ETList, 'ETListmiddle': ETListmiddle,
+                                                         'absError': absErrorList, 'relError': relErrorList})
