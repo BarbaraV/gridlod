@@ -10,7 +10,7 @@ NpFine = np.prod(NFine+1)
 Nepsilon = np.array([256])
 NList = [8,16,32,64]
 k=3
-NSamples = 1000
+NSamples = 500
 dim = np.size(NFine)
 
 boundaryConditions = None
@@ -72,11 +72,11 @@ for Nc in NList:
     f = ffunc(xpFine).flatten()
 
     aRefList, KmsijList, muTPrimeList, _, _ = computeCSI_offline(world, Nepsilon // NCoarse, k, boundaryConditions,model)
-
-    mean_error_combined = np.zeros(len(pList))
-
     aharmList = computeAharm_offline()
-    mean_harm_error = np.zeros(len(pList))
+
+    harmErrorList = np.zeros((len(pList), NSamples))
+    absErrorList = np.zeros((len(pList), NSamples))
+    relErrorList = np.zeros((len(pList), NSamples))
 
     ii = 0
     for p in pList:
@@ -108,22 +108,18 @@ for Nc in NList:
             uLodCoarsecomb = basis * uFullcomb
 
             L2norm = np.sqrt(np.dot(uLodCoarsetrue, MFull * uLodCoarsetrue))
-            error_combined = np.sqrt(np.dot(uLodCoarsetrue-uLodCoarsecomb, MFull*(uLodCoarsetrue-uLodCoarsecomb)))/L2norm
-            #print("L2-error in {}th sample for new LOD is: {}".format(N, error_combined))
-            mean_error_combined[ii] += error_combined
+            abserror_combined = np.sqrt(np.dot(uLodCoarsetrue-uLodCoarsecomb, MFull*(uLodCoarsetrue-uLodCoarsecomb)))
 
-            mean_harm_error[ii] += computeAharm_error(aharmList,aPert)
+            absErrorList[ii, N] = abserror_combined
+            relErrorList[ii, N] = abserror_combined/L2norm
+            harmErrorList[ii, N] = computeAharm_error(aharmList,aPert)
 
-        mean_error_combined[ii] /= NSamples
-        print("mean L2-error for new LOD over {} samples for p={} is: {}".format(NSamples, p, mean_error_combined[ii]))
-        mean_harm_error[ii] /= NSamples
-        print("mean L2-error for harmonic mean over {} samples for p={} is: {}".format(NSamples, p, mean_harm_error[ii]))
+        print("mean L2-error for new LOD over {} samples for p={} is: {}".format(NSamples, p, np.mean(relErrorList[ii,:])))
+        print("mean L2-error for harmonic mean over {} samples for p={} is: {}".format(NSamples, p, np.mean(harmErrorList[ii,:])))
         ii += 1
 
-    print(mean_error_combined)
-    print(mean_harm_error)
     sio.savemat('_meanErr_Nc'+str(Nc)+'.mat',
-                {'meanErr_comb': mean_error_combined, 'meanHarmErr': mean_harm_error, 'pList': pList})
+                {'absErr': absErrorList, 'relErr': relErrorList, 'HarmErr': harmErrorList, 'pList': pList})
 
 #plt.plot(pList, mean_error_combined, '*')
 #plt.show()

@@ -36,9 +36,6 @@ aRef = np.copy(aRefListincl[-1])
 KmsijRef = np.copy(KmsijListincl[-1])
 muTPrimeRef = muTPrimeListincl[-1]
 
-mean_error_combined_incl = np.zeros((len(pList), len(def_values)))
-mean_error_combined_value = np.zeros((len(pList), len(def_values)))
-mean_error_perturbed = np.zeros((len(pList), len(def_values)))
 
 def computeKmsij(TInd, a, IPatch):
     #print('.', end='', flush=True)
@@ -49,10 +46,13 @@ def computeKmsij(TInd, a, IPatch):
     csi = lod.computeBasisCoarseQuantities(patch, correctorsList, aPatch)
     return patch, correctorsList, csi.Kmsij, csi
 
-ii = 0
-for p in pList:
-    jj = 0
-    for value in def_values:
+for value in def_values:
+    ii = 0
+    abs_error_defect = np.zeros((len(pList), NSamples))
+    rel_error_defect = np.zeros((len(pList), NSamples))
+    abs_error_erase = np.zeros((len(pList), NSamples))
+    rel_error_erase = np.zeros((len(pList), NSamples))
+    for p in pList:
         modeldef = {'name': 'inclvalue', 'bgval': alpha, 'inclval': beta, 'left': left, 'right': right, 'defval': value}
         aRefListdef, KmsijListdef, muTPrimeListdef, _, _ = computeCSI_offline(world, Nepsilon // NCoarse, k,
                                                                               boundaryConditions, modeldef)
@@ -84,10 +84,11 @@ for p in pList:
             uLodCoarsecombincl = basis * uFullcombincl
 
             L2norm = np.sqrt(np.dot(uLodCoarsetrue, MFull * uLodCoarsetrue))
-            error_combined_incl = np.sqrt(np.dot(uLodCoarsetrue-uLodCoarsecombincl,
-                                                 MFull*(uLodCoarsetrue-uLodCoarsecombincl)))/L2norm
+            abserror_incl = np.sqrt(np.dot(uLodCoarsetrue-uLodCoarsecombincl,
+                                                 MFull*(uLodCoarsetrue-uLodCoarsecombincl)))
             #print("L2-error in {}th sample for new LOD is: {}".format(N, error_combined))
-            mean_error_combined_incl[ii, jj] += error_combined_incl
+            abs_error_erase[ii, N]  = abserror_incl
+            rel_error_erase[ii, N] = abserror_incl/L2norm
 
             # combined LOD -- with defect value
             KFullcombdef, _ = compute_combined_MsStiffness(world, Nepsilon, aPert, aRefListdef, KmsijListdef,
@@ -97,39 +98,17 @@ for p in pList:
             uFullcombdef, _ = pglod.solvePeriodic(world, KFullcombdef, bFull, faverage, boundaryConditions)
             uLodCoarsecombdef = basis * uFullcombdef
 
-            error_combined_def = np.sqrt(np.dot(uLodCoarsetrue - uLodCoarsecombdef,
-                                                 MFull * (uLodCoarsetrue - uLodCoarsecombdef))) / L2norm
-            # print("L2-error in {}th sample for new LOD is: {}".format(N, error_combined))
-            mean_error_combined_value[ii, jj] += error_combined_def
+            abserror_combined_def = np.sqrt(np.dot(uLodCoarsetrue - uLodCoarsecombdef,
+                                                 MFull * (uLodCoarsetrue - uLodCoarsecombdef)))
+            abs_error_defect[ii, N] = abserror_combined_def
+            rel_error_defect[ii, N] = abserror_combined_def/L2norm
 
-            #pertrubed LOD
-            KFullpert, _ = compute_perturbed_MsStiffness(world, aPert, aRef, KmsijRef, muTPrimeRef, k, 0)
-            bFull = basis.T * MFull * f
-            uFullpert, _ = pglod.solvePeriodic(world, KFullpert, bFull, faverage, boundaryConditions)
-            uLodCoarsepert = basis * uFullpert
-
-            error_pert = np.sqrt(
-                np.dot(uLodCoarsetrue - uLodCoarsepert, MFull * (uLodCoarsetrue - uLodCoarsepert))) / L2norm
-            #print("L2-error in {}th sample for HKM LOD is: {}".format(N, error_pert))
-            mean_error_perturbed[ii, jj] += error_pert
-        mean_error_combined_incl[ii,jj] /= NSamples
-        mean_error_combined_value[ii, jj] /= NSamples
-        mean_error_perturbed[ii,jj] /= NSamples
         print("mean L2-error for new LOD (erasing incl) over {} samples for p={} and defect value {} is: {}".
-              format(NSamples, p, value, mean_error_combined_incl[ii, jj]))
+              format(NSamples, p, value, np.mean(rel_error_erase[ii, :])))
         print("mean L2-error for new LOD (defect incl) over {} samples for p={} and defect value {} is: {}".
-              format(NSamples, p, value, mean_error_combined_value[ii, jj]))
-        print("mean L2-error for perturbed LOD over {} samples for p={} and defect value {} is: {}".
-              format(NSamples, p, value, mean_error_perturbed[ii,jj]))
-        jj += 1
+              format(NSamples, p, value, np.mean(rel_error_defect[ii, :])))
+        ii += 1
 
-    ii += 1
-
-
-print("mean error combined erased incl {}".format(mean_error_combined_incl))
-print("mean error combined defect incl {}".format(mean_error_combined_value))
-print("mean error perturbed {}".format(mean_error_perturbed))
-
-sio.savemat('_meanErr2d_defvalues.mat',
-                {'relerrL2new_incl': mean_error_combined_incl, 'relerrL2new_def': mean_error_combined_value,
-                 'relerrL2pert': mean_error_perturbed, 'pList': pList, 'values': def_values})
+    sio.savemat('_meanErr2d_defvalues'+str(value)+'.mat',
+                {'abserrErase': abs_error_erase, 'relerrErase': rel_error_erase, 'aberrDefect': abs_error_defect,
+                 'relerrDefect': rel_error_defect})

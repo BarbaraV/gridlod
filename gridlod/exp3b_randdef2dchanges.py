@@ -34,9 +34,6 @@ xpFine = util.pCoordinates(NFine)
 ffunc = lambda x: 8*np.pi**2*np.sin(2*np.pi*x[:,0])*np.cos(2*np.pi*x[:,1])
 f = ffunc(xpFine).flatten()
 
-mean_error_combined = np.zeros((len(pList), len(modelList)))
-mean_error_perturbed = np.zeros((len(pList), len(modelList)))
-
 def computeKmsij(TInd, a, IPatch):
     #print('.', end='', flush=True)
     patch = PatchPeriodic(world, k, TInd)
@@ -46,10 +43,12 @@ def computeKmsij(TInd, a, IPatch):
     csi = lod.computeBasisCoarseQuantities(patch, correctorsList, aPatch)
     return patch, correctorsList, csi.Kmsij, csi
 
-ii = 0
-for p in pList:
-    jj = 0
-    for model in modelList:
+for model in modelList:
+    ii = 0
+
+    abs_error = np.zeros((len(pList), NSamples))
+    rel_error = np.zeros((len(pList), NSamples))
+    for p in pList:
         aRefListdef, KmsijListdef, muTPrimeListdef, _, _ = computeCSI_offline(world, Nepsilon // NCoarse, k,
                                                                               boundaryConditions, model)
         aRef = np.copy(aRefListdef[-1])
@@ -85,35 +84,14 @@ for p in pList:
             uFullcombdef, _ = pglod.solvePeriodic(world, KFullcombdef, bFull, faverage, boundaryConditions)
             uLodCoarsecombdef = basis * uFullcombdef
 
-            error_combined = np.sqrt(np.dot(uLodCoarsetrue - uLodCoarsecombdef,
-                                                 MFull * (uLodCoarsetrue - uLodCoarsecombdef))) / L2norm
-            # print("L2-error in {}th sample for new LOD is: {}".format(N, error_combined))
-            mean_error_combined[ii, jj] += error_combined
+            abs_error_combined = np.sqrt(np.dot(uLodCoarsetrue - uLodCoarsecombdef,
+                                                 MFull * (uLodCoarsetrue - uLodCoarsecombdef)))
+            abs_error[ii, N] = abs_error_combined
+            rel_error[ii, N] = abs_error_combined/L2norm
 
-            #pertrubed LOD
-            KFullpert, _ = compute_perturbed_MsStiffness(world, aPert, aRef, KmsijRef, muTPrimeRef, k, 0)
-            bFull = basis.T * MFull * f
-            uFullpert, _ = pglod.solvePeriodic(world, KFullpert, bFull, faverage, boundaryConditions)
-            uLodCoarsepert = basis * uFullpert
-
-            error_pert = np.sqrt(
-                np.dot(uLodCoarsetrue - uLodCoarsepert, MFull * (uLodCoarsetrue - uLodCoarsepert))) / L2norm
-            #print("L2-error in {}th sample for HKM LOD is: {}".format(N, error_pert))
-            mean_error_perturbed[ii, jj] += error_pert
-        mean_error_combined[ii,jj] /= NSamples
-        mean_error_perturbed[ii,jj] /= NSamples
         print("mean L2-error for new LOD over {} samples for p={} and model {} is: {}".
-              format(NSamples, p, model['name'], mean_error_combined[ii, jj]))
-        print("mean L2-error for perturbed LOD over {} samples for p={} and model {} is: {}".
-              format(NSamples, p, model['name'], mean_error_perturbed[ii,jj]))
-        jj += 1
+              format(NSamples, p, model['name'], np.mean(rel_error[ii, :])))
+        ii += 1
 
-    ii += 1
-
-
-print("mean error combined {}".format(mean_error_combined))
-print("mean error perturbed {}".format(mean_error_perturbed))
-
-sio.savemat('_meanErr2d_defchanges.mat',
-                {'relerrL2new': mean_error_combined, 'relerrL2pert': mean_error_perturbed,
-                 'pList': pList, 'names': [model['name'] for model in modelList]})
+    sio.savemat('_meanErr2d_defchanges'+str(model['name'])+'.mat',
+                {'abserr': abs_error, 'relerr': rel_error, 'pList': pList})
