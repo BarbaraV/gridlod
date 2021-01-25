@@ -11,7 +11,7 @@ NpFine = np.prod(NFine+1)
 Nepsilon = np.array([128,128])
 NCoarse = np.array([32,32])
 k=4
-NSamples = 2#350
+NSamples = 350
 dim = np.size(NFine)
 
 boundaryConditions = None
@@ -121,10 +121,11 @@ for p in pList:
         abserr_comb[ii, N] = abs_error_combined
         relerr_comb[ii, N] = abs_error_combined/L2norm
 
-
+        #standard LOD no updates
         abs_error_pert = np.sqrt(np.dot(uLodCoarsetrue - uLodCoarsepert, MFull * (uLodCoarsetrue - uLodCoarsepert)))
         abserr_noup[ii, N] = abs_error_pert
         relerr_noup[ii, N] = abs_error_pert/L2norm
+
         if p == 0.1:
             tic = time.perf_counter()
             KFullpertup, _ = compute_perturbed_MsStiffness(world, aPert, aRef, KmsijRef, muTPrimeRef, k, percentage_comp)

@@ -9,7 +9,7 @@ NFine = np.array([256])
 NpFine = np.prod(NFine+1)
 Nepsilon = np.array([256])
 NList = [8,16,32,64]
-k=3
+k=0
 NSamples = 500
 dim = np.size(NFine)
 
@@ -91,7 +91,7 @@ for Nc in NList:
             #true LOD
             middle = NCoarse[0] // 2
             patchRef = PatchPeriodic(world, k, middle)
-            IPatch = lambda: interp.L2ProjectionPatchMatrix(patchRef)
+            IPatch = lambda: interp.nodalPatchMatrix(patchRef)
             computeKmsijT = lambda TInd: computeKmsij(TInd, aPert, IPatch)
             patchT, _, KmsijTtrue, _ = zip(*map(computeKmsijT, range(world.NtCoarse)))
             KFulltrue = pglod.assembleMsStiffnessMatrix(world, patchT, KmsijTtrue, periodic=True)

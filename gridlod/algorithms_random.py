@@ -39,7 +39,10 @@ def computeCSI_offline(world, NepsilonElement, k, boundaryConditions, model, cor
         #print('.', end='', flush=True)
         tic = time.perf_counter()
         patch = PatchPeriodic(world, k, TInd)
-        IPatch = lambda: interp.L2ProjectionPatchMatrix(patch, boundaryConditions)
+        if dim == 1:
+            IPatch = lambda: interp.nodalPatchMatrix(patch)
+        else:
+            IPatch = lambda: interp.L2ProjectionPatchMatrix(patch, boundaryConditions)
 
         correctorsList = lod.computeBasisCorrectors(patch, IPatch, aPatch)
         csi = lod.computeBasisCoarseQuantities(patch, correctorsList, aPatch)
