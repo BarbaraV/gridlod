@@ -3,7 +3,7 @@ import scipy.io as sio
 
 from gridlod.world import World, PatchPeriodic
 from gridlod import util, fem, coef, lod, pglod, interp, build_coefficient
-from gridlod.algorithms_random import computeCSI_offline, compute_combined_MsStiffness, compute_perturbed_MsStiffness
+from gridlod.algorithms_random import computeCSI_offline, compute_combined_MsStiffness
 
 NFine = np.array([256, 256])
 NpFine = np.prod(NFine+1)
@@ -21,7 +21,6 @@ right = np.array([0.75, 0.75])
 pList = [0.01, 0.05, 0.1, 0.15]
 def_values = [alpha, 0.5, 5.]
 modelincl = {'name': 'incl', 'bgval': alpha, 'inclval': beta, 'left': left, 'right': right}
-#percentage_comp = 0.6
 np.random.seed(123)
 
 NCoarseElement = NFine // NCoarse
@@ -30,11 +29,6 @@ world = World(NCoarse, NCoarseElement, boundaryConditions)
 xpFine = util.pCoordinates(NFine)
 ffunc = lambda x: 8*np.pi**2*np.sin(2*np.pi*x[:,0])*np.cos(2*np.pi*x[:,1])
 f = ffunc(xpFine).flatten()
-
-aRefListincl, KmsijListincl,muTPrimeListincl, _, _ = computeCSI_offline(world, Nepsilon // NCoarse, k, boundaryConditions, modelincl)
-aRef = np.copy(aRefListincl[-1])
-KmsijRef = np.copy(KmsijListincl[-1])
-muTPrimeRef = muTPrimeListincl[-1]
 
 
 def computeKmsij(TInd, a, IPatch):
@@ -50,12 +44,11 @@ for value in def_values:
     ii = 0
     abs_error_defect = np.zeros((len(pList), NSamples))
     rel_error_defect = np.zeros((len(pList), NSamples))
-    abs_error_erase = np.zeros((len(pList), NSamples))
-    rel_error_erase = np.zeros((len(pList), NSamples))
+
+    modeldef = {'name': 'inclvalue', 'bgval': alpha, 'inclval': beta, 'left': left, 'right': right, 'defval': value}
+    aRefListdef, KmsijListdef, muTPrimeListdef, _, _ = computeCSI_offline(world, Nepsilon // NCoarse, k,
+                                                                          boundaryConditions, modeldef)
     for p in pList:
-        modeldef = {'name': 'inclvalue', 'bgval': alpha, 'inclval': beta, 'left': left, 'right': right, 'defval': value}
-        aRefListdef, KmsijListdef, muTPrimeListdef, _, _ = computeCSI_offline(world, Nepsilon // NCoarse, k,
-                                                                              boundaryConditions, modeldef)
         for N in range(NSamples):
             aPert = build_coefficient.build_inclusions_defect_2d(NFine,Nepsilon,alpha,beta,left,right,p,value)
 
@@ -76,20 +69,6 @@ for value in def_values:
             uFulltrue, _ = pglod.solvePeriodic(world, KFulltrue, bFull, faverage, boundaryConditions)
             uLodCoarsetrue = basis * uFulltrue
 
-            #combined LOD -- only erasing inclusions
-            KFullcombincl, _ = compute_combined_MsStiffness(world,Nepsilon,aPert,aRefListincl,KmsijListincl,muTPrimeListincl,
-                                                        k,modelincl,compute_indicator=False)
-            bFull = basis.T * MFull * f
-            uFullcombincl, _ = pglod.solvePeriodic(world, KFullcombincl, bFull, faverage, boundaryConditions)
-            uLodCoarsecombincl = basis * uFullcombincl
-
-            L2norm = np.sqrt(np.dot(uLodCoarsetrue, MFull * uLodCoarsetrue))
-            abserror_incl = np.sqrt(np.dot(uLodCoarsetrue-uLodCoarsecombincl,
-                                                 MFull*(uLodCoarsetrue-uLodCoarsecombincl)))
-            #print("L2-error in {}th sample for new LOD is: {}".format(N, error_combined))
-            abs_error_erase[ii, N]  = abserror_incl
-            rel_error_erase[ii, N] = abserror_incl/L2norm
-
             # combined LOD -- with defect value
             KFullcombdef, _ = compute_combined_MsStiffness(world, Nepsilon, aPert, aRefListdef, KmsijListdef,
                                                             muTPrimeListdef,
@@ -97,18 +76,16 @@ for value in def_values:
             bFull = basis.T * MFull * f
             uFullcombdef, _ = pglod.solvePeriodic(world, KFullcombdef, bFull, faverage, boundaryConditions)
             uLodCoarsecombdef = basis * uFullcombdef
+            L2norm = np.sqrt(np.dot(uLodCoarsetrue, MFull * uLodCoarsetrue))
 
             abserror_combined_def = np.sqrt(np.dot(uLodCoarsetrue - uLodCoarsecombdef,
                                                  MFull * (uLodCoarsetrue - uLodCoarsecombdef)))
             abs_error_defect[ii, N] = abserror_combined_def
             rel_error_defect[ii, N] = abserror_combined_def/L2norm
 
-        print("mean L2-error for new LOD (erasing incl) over {} samples for p={} and defect value {} is: {}".
-              format(NSamples, p, value, np.mean(rel_error_erase[ii, :])))
         print("mean L2-error for new LOD (defect incl) over {} samples for p={} and defect value {} is: {}".
               format(NSamples, p, value, np.mean(rel_error_defect[ii, :])))
         ii += 1
 
     sio.savemat('_meanErr2d_defvalues'+str(value)+'.mat',
-                {'abserrErase': abs_error_erase, 'relerrErase': rel_error_erase, 'aberrDefect': abs_error_defect,
-                 'relerrDefect': rel_error_defect})
+                {'aberrDefect': abs_error_defect, 'relerrDefect': rel_error_defect})

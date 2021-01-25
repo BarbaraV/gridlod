@@ -3,7 +3,7 @@ import scipy.io as sio
 
 from gridlod.world import World, PatchPeriodic
 from gridlod import util, fem, coef, lod, pglod, interp, build_coefficient
-from gridlod.algorithms_random import computeCSI_offline, compute_combined_MsStiffness, compute_perturbed_MsStiffness
+from gridlod.algorithms_random import computeCSI_offline, compute_combined_MsStiffness
 
 NFine = np.array([256, 256])
 NpFine = np.prod(NFine+1)
@@ -48,13 +48,13 @@ for model in modelList:
 
     abs_error = np.zeros((len(pList), NSamples))
     rel_error = np.zeros((len(pList), NSamples))
-    for p in pList:
-        aRefListdef, KmsijListdef, muTPrimeListdef, _, _ = computeCSI_offline(world, Nepsilon // NCoarse, k,
-                                                                              boundaryConditions, model)
-        aRef = np.copy(aRefListdef[-1])
-        KmsijRef = np.copy(KmsijListdef[-1])
-        muTPrimeRef = muTPrimeListdef[-1]
 
+    aRefListdef, KmsijListdef, muTPrimeListdef, _, _ = computeCSI_offline(world, Nepsilon // NCoarse, k,
+                                                                          boundaryConditions, model)
+    aRef = np.copy(aRefListdef[-1])
+    KmsijRef = np.copy(KmsijListdef[-1])
+    muTPrimeRef = muTPrimeListdef[-1]
+    for p in pList:
         for N in range(NSamples):
             aPert = build_coefficient.build_inclusions_change_2d(NFine,Nepsilon,alpha,beta,left,right,p,model)
 

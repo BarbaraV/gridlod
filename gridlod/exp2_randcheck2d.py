@@ -11,7 +11,7 @@ NpFine = np.prod(NFine+1)
 Nepsilon = np.array([128,128])
 NCoarse = np.array([32,32])
 k=4
-NSamples = 350
+NSamples = 2#350
 dim = np.size(NFine)
 
 boundaryConditions = None
@@ -64,7 +64,7 @@ basis = fem.assembleProlongationMatrix(world.NWorldCoarse, world.NCoarseElement)
 MFull = fem.assemblePatchMatrix(world.NWorldFine, world.MLocFine)
 computePatch = lambda TInd: PatchPeriodic(world, k, TInd)
 patchT = list(map(computePatch, range(world.NtCoarse)))
-KFullpert, _ = pglod.assembleMsStiffnessMatrix(world, patchT, periodic=True)
+KFullpert = pglod.assembleMsStiffnessMatrix(world, patchT, KmsijRef, periodic=True)
 bFull = basis.T * MFull * f
 faverage = np.dot(MFull * np.ones(NpFine), f)
 uFullpert, _ = pglod.solvePeriodic(world, KFullpert, bFull, faverage, boundaryConditions)
