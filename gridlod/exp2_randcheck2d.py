@@ -11,13 +11,13 @@ NpFine = np.prod(NFine+1)
 Nepsilon = np.array([128,128])
 NCoarse = np.array([32,32])
 k=4
-NSamples = 2#350
+NSamples = 350
 dim = np.size(NFine)
 
 boundaryConditions = None
 alpha = 0.1
 beta = 1.
-pList = [0.1]#[0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09, 0.1]
+pList = [0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09, 0.1]
 percentage_comp = 0.2
 model ={'name': 'check', 'alpha': alpha, 'beta': beta}
 np.random.seed(123)
