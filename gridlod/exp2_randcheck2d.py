@@ -11,13 +11,13 @@ NpFine = np.prod(NFine+1)
 Nepsilon = np.array([128,128])
 NCoarse = np.array([32,32])
 k=4
-NSamples = 350
+NSamples = 2#350
 dim = np.size(NFine)
 
 boundaryConditions = None
 alpha = 0.1
 beta = 1.
-pList = [0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09, 0.1]
+pList = [0.1]#[0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09, 0.1]
 percentage_comp = 0.2
 model ={'name': 'check', 'alpha': alpha, 'beta': beta}
 np.random.seed(123)
@@ -48,6 +48,8 @@ abserr_comb= np.zeros((len(pList), NSamples))
 relerr_comb= np.zeros((len(pList), NSamples))
 abserr_noup= np.zeros((len(pList), NSamples))
 relerr_noup= np.zeros((len(pList), NSamples))
+abserr_up = np.zeros((len(pList), NSamples))
+relerr_up = np.zeros((len(pList), NSamples))
 
 def computeKmsij(TInd, a, IPatch):
     #print('.', end='', flush=True)
@@ -73,7 +75,6 @@ uLodCoarsepert = basis * uFullpert
 ii = 0
 for p in pList:
     if p == 0.1:
-        error_samp_hkm = np.zeros(NSamples)
         mean_time_true = 0.
         mean_time_perturbed = 0.
         mean_time_combined = 0.
@@ -126,21 +127,28 @@ for p in pList:
         abserr_noup[ii, N] = abs_error_pert
         relerr_noup[ii, N] = abs_error_pert/L2norm
 
+        #LOD with updates
         if p == 0.1:
             tic = time.perf_counter()
             KFullpertup, _ = compute_perturbed_MsStiffness(world, aPert, aRef, KmsijRef, muTPrimeRef, k, percentage_comp)
             toc = time.perf_counter()
             mean_time_perturbed += (toc-tic)
-            bFull = basis.T * MFull * f
-            uFullpertup, _ = pglod.solvePeriodic(world, KFullpertup, bFull, faverage, boundaryConditions)
-            uLodCoarsepertup = basis * uFullpertup
-            error_pertup = np.sqrt(
-                np.dot(uLodCoarsetrue - uLodCoarsepertup, MFull * (uLodCoarsetrue - uLodCoarsepertup))) / L2norm
-            # print("L2-error in {}th sample for HKM LOD is: {}".format(N, error_pert))
-            error_samp_hkm[N] = error_pertup
+        else:
+            KFullpertup, _ = compute_perturbed_MsStiffness(world, aPert, aRef, KmsijRef, muTPrimeRef, k,
+                                                           percentage_comp)
+        bFull = basis.T * MFull * f
+        uFullpertup, _ = pglod.solvePeriodic(world, KFullpertup, bFull, faverage, boundaryConditions)
+        uLodCoarsepertup = basis * uFullpertup
+        error_pertup = np.sqrt(np.dot(uLodCoarsetrue - uLodCoarsepertup, MFull * (uLodCoarsetrue - uLodCoarsepertup)))
+        abserr_up[ii, N] = error_pertup
+        relerr_up[ii, N] = error_pertup/L2norm
 
     print("mean L2-error for new LOD over {} samples for p={} is: {}".format(NSamples, p, np.mean(relerr_comb[ii,:])))
-    print("mean L2-error for perturbed LOD over {} samples for p={} is: {}".format(NSamples, p, np.mean(relerr_noup[ii,:])))
+    print("mean L2-error for perturbed LOD without updates over {} samples for p={} is: {}".
+          format(NSamples, p, np.mean(relerr_noup[ii,:])))
+    print("mean L2-error for perturbed LOD with {} updates over {} samples for p={} is: {}".
+          format(percentage_comp, NSamples, p, np.mean(relerr_up[ii,:])))
+
     ii += 1
 
     if p == 0.1:
@@ -148,14 +156,10 @@ for p in pList:
         mean_time_perturbed /= NSamples
         mean_time_combined /= NSamples
 
-        sio.savemat('_relErrHKM.mat', {'relErrHKM': error_samp_hkm, 'iiSamp': np.arange(NSamples)})
-
         print("mean assembly time for standard LOD over {} samples is: {}".format(NSamples, mean_time_true))
         print("mean assembly time for perturbed LOD over {} samples is: {}".format(NSamples, mean_time_perturbed))
         print("mean assembly time for new LOD over {} samples is: {}".format(NSamples, mean_time_combined))
 
-        print("mean L2-error for perturbed LOD over {} samples with {} updates is: {}".format(NSamples, percentage_comp,
-                                                                                       np.mean(error_samp_hkm)))
-
 sio.savemat('_meanErr2drandcheck.mat', {'abserrNew': abserr_comb, 'relerrNew': relerr_comb,
-                                        'absErrNoup': abserr_noup, 'relerrNoup': abserr_noup, 'pList': pList})
+                                        'absErrNoup': abserr_noup, 'relerrNoup': abserr_noup,
+                                        'absErrUp': abserr_up, 'relerrUp': relerr_up, 'pList': pList})
