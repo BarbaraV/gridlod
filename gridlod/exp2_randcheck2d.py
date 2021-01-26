@@ -133,15 +133,12 @@ for p in pList:
             KFullpertup, _ = compute_perturbed_MsStiffness(world, aPert, aRef, KmsijRef, muTPrimeRef, k, percentage_comp)
             toc = time.perf_counter()
             mean_time_perturbed += (toc-tic)
-        else:
-            KFullpertup, _ = compute_perturbed_MsStiffness(world, aPert, aRef, KmsijRef, muTPrimeRef, k,
-                                                           percentage_comp)
-        bFull = basis.T * MFull * f
-        uFullpertup, _ = pglod.solvePeriodic(world, KFullpertup, bFull, faverage, boundaryConditions)
-        uLodCoarsepertup = basis * uFullpertup
-        error_pertup = np.sqrt(np.dot(uLodCoarsetrue - uLodCoarsepertup, MFull * (uLodCoarsetrue - uLodCoarsepertup)))
-        abserr_up[ii, N] = error_pertup
-        relerr_up[ii, N] = error_pertup/L2norm
+            bFull = basis.T * MFull * f
+            uFullpertup, _ = pglod.solvePeriodic(world, KFullpertup, bFull, faverage, boundaryConditions)
+            uLodCoarsepertup = basis * uFullpertup
+            error_pertup = np.sqrt(np.dot(uLodCoarsetrue - uLodCoarsepertup, MFull * (uLodCoarsetrue - uLodCoarsepertup)))
+            abserr_up[ii, N] = error_pertup
+            relerr_up[ii, N] = error_pertup/L2norm
 
     print("mean L2-error for new LOD over {} samples for p={} is: {}".format(NSamples, p, np.mean(relerr_comb[ii,:])))
     print("mean L2-error for perturbed LOD without updates over {} samples for p={} is: {}".
