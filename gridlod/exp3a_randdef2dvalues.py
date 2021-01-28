@@ -88,4 +88,4 @@ for value in def_values:
         ii += 1
 
     sio.savemat('_meanErr2d_defvalues'+str(value)+'.mat',
-                {'aberrDefect': abs_error_defect, 'relerrDefect': rel_error_defect})
+                {'aberrDefect': abs_error_defect, 'relerrDefect': rel_error_defect, 'pList': pList})
